@@ -11,4 +11,5 @@ setup(ext_modules = cythonize(Extension(
            sources=["lib.pyx", "Neurons.cpp"], # the Cython source and
                                                   # additional C++ source files
            language="c++",                        # generate and compile C++ code
+            extra_compile_args=["-std=c++11"],
       )))

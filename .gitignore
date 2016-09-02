@@ -1,0 +1,11 @@
+
+# ignore compiled libs
+*.so
+# ignore build
+/cython_code/build
+# ignore lib.cpp
+/cython_code/lib.cpp
+# ignore pycache
+/__pycache__/
+
+.directory

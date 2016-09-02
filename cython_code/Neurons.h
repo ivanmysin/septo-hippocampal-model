@@ -139,6 +139,7 @@ namespace networks {
     class Network{
     public:
         Network(){
+            cout << "Test1" << endl;
             neurons = new vector<complex_neurons::ComplexNeuron*>;
             synapses = new vector<synapses::OriginSynapse*>;
         };

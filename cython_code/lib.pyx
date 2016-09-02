@@ -54,17 +54,28 @@ cdef extern from "Neurons.h" namespace "synapses":
         
 cdef extern from "Neurons.h" namespace "networks":
     cdef cppclass Network:
-        Network()  except +
+        Network() except +
+        Network(vector [ComplexNeuron*]*, vector [OriginSynapse*]*)  except +
         void integrate(double, double)
         void addNeuron(ComplexNeuron*)
         void addSynapse(OriginSynapse*)
-        vector [ComplexNeuron*] neurons
-        vector [OriginSynapse*] synapses
+        vector [ComplexNeuron*]* neurons
+        vector [OriginSynapse*]* synapses
         
 cdef class pyNetwork:
     cdef Network* net
+    
     def __cinit_(self, neurons_params, synapses_params):
-        self.net = new Network()
+        
+        cdef vector [ComplexNeuron*]* neurons = new vector [ComplexNeuron*]()
+        cdef vector [OriginSynapse*]* synapses = new vector [OriginSynapse*]()
+        self.net = new Network(neurons, synapses)
+        
+        for idx in range(len(neurons_params)):
+            pass
+        
+        for idx in range(len(synapses_params)):
+            pass
         
     def integrate(self, double dt, double duration):
         self.net.integrate(dt, duration)
@@ -152,6 +163,7 @@ cdef class pyComplexNeuron:
         
     def integrate(self, double dt, double duration):
         self.neuron.integrate(dt, duration)    
+        
     def getVhistByCompartmentName(self, name):
         cdef string namecpp = name.encode("UTF-8")
         cdef vector [double] Vhist = self.neuron.getVhistByCompartmentName(namecpp)

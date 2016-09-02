@@ -32,7 +32,7 @@ soma_params = {
 }
 
 
-dendrit_params = {
+dendrite_params = {
     "name": "dendrite",
     "params": {
         "V0": 0.0,
@@ -63,8 +63,47 @@ connection_params = {
     "g": 1.5,
 }
 
+ext_synapce_params = {
+    "Erev" : 60.0,
+    "gbarS": 0.005,
+    "tau" : 2.0,
+    "w" : 1.0,
+}
+"""
 neuron = lib.pyComplexNeuron([soma_params, dendrit_params], [connection_params])
 neuron.integrate(0.1, 1000)
 V = neuron.getVhistByCompartmentName("soma")
 plt.plot(V)
+"""
+neurons = []
+synapses = []
+Nn = 20
+Ns = 30
 
+for idx in range(Nn):
+    soma = {
+        "name": "soma",
+        "params" : soma_params.copy()
+    }
+    dendrite = {
+        "name" : "dendrite",
+        "params": dendrite_params.copy() 
+    }
+    connection = connection_params.copy()
+    neuron = {
+        "compartments" : [soma, dendrite],
+        "connections" : [connection]
+    }
+    neurons.append(neuron)
+    
+for idx in range(Ns):
+    synapse = {
+       "pre_ind": 0, 
+       "post_ind": 1,
+       "pre_compartment_name": "soma",
+       "post_compartment_name" : "soma",
+       "params": ext_synapce_params.copy()
+    }
+  
+net = lib.pyNetwork(neurons, synapses) 
+net.integrate(0.1, 1)

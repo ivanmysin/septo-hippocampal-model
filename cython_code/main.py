@@ -10,7 +10,9 @@ import matplotlib.pyplot as plt
 def iext_function(neuron_ind, compartment_name, t, params=None):
     Iext = 0
     
-    if not(type(params) is None):
+    try:
+        iext_function.phase_shift
+    except AttributeError:
         iext_function.phase_shift = params
         
     if compartment_name == "soma":

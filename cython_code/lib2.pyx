@@ -332,8 +332,8 @@ cdef class SimpleSynapse(OriginSynapse):
             return
     
         cdef double Vpost = self.post.getV()
-        cdef double Isyn = -self.w * self.gbarS * self.S * (Vpost - self.Erev)
-        self.post.addIsyn(Isyn) #  Isyn for post neuron
+        cdef double Isyn = self.w * self.gbarS * self.S * (Vpost - self.Erev)
+        self.post.addIsyn(-Isyn) #  Isyn for post neuron
         
         cdef double k1 = self.S
         cdef double k2 = k1 - 0.5 * dt * (self.tau * k1)

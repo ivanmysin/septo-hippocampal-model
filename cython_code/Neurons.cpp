@@ -157,6 +157,7 @@ namespace complex_neurons {
         }
 
         ICa = gbarCa * s * s * (V - ECa);
+        // Iext = Iextmean;
         Iext = (*normRand)(*generator);
         Isyn = 0;
     }
@@ -395,7 +396,7 @@ namespace complex_neurons {
 
 }
 
-namespace synapses {
+namespace synapses_models {
 
 /////////////////////////////////////////////////////////////////////
     SimpleSynapse::SimpleSynapse(complex_neurons::OriginCompartment* pre_, complex_neurons::OriginCompartment* post_, map<string, double> params){
@@ -438,7 +439,8 @@ namespace synapses {
 }
 
 namespace networks {
-    Network::Network( vector<complex_neurons::ComplexNeuron*>* neurons_, vector<synapses::OriginSynapse*>*  synapses_ ){
+    Network::Network( vector<complex_neurons::ComplexNeuron*>* neurons_, vector<synapses_models::OriginSynapse*>*  synapses_ ){
+		cout << "Tsst 3" << endl;
         neurons = neurons_;
         synapses = synapses_;
 
@@ -446,7 +448,7 @@ namespace networks {
 //////////////
     void Network::integrate(double dt, double duration){
         double t = 0;
-
+		cout << "Tsst 2" << endl;
         while (t < duration) {
             for ( unsigned int i = 0; i < neurons->size(); i++ ) {
                 neurons->at(i)->integrate(dt, dt);
@@ -460,6 +462,14 @@ namespace networks {
         }
 
     }
+////////////
+    void Network::init(){
+			cout << "Test 1" << endl;
+            vector<complex_neurons::ComplexNeuron*>* neu = new vector<complex_neurons::ComplexNeuron*> ();
+            neurons = neu;
+            //synapses = new vector<synapses_models::OriginSynapse*>();
+			
+	}
 }
 
 

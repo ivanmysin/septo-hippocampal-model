@@ -7,9 +7,9 @@ from distutils.core import setup, Extension
 from Cython.Build import cythonize
 
 setup(ext_modules = cythonize(Extension(
-           "lib",                                # the extension name
-           sources=["lib.pyx", "Neurons.cpp"], # the Cython source and
+           "lib2",                                # the extension name
+           sources=["lib2.pyx"], # the Cython source and
                                                   # additional C++ source files
            language="c++",                        # generate and compile C++ code
-            extra_compile_args=["-std=c++11"],
+           extra_compile_args=["-std=c++11"],
       )))

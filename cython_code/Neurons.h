@@ -91,16 +91,16 @@ namespace complex_neurons {
 
 	public:
 		ComplexNeuron(){
-                    compartments = new map<string, Compartment*>();
-                    connections = new map<string, Connection*>();
-                };
+            compartments = new map<string, Compartment*>();
+            connections = new map<string, Connection*>();
+		};
+		void addCompartment(string name, Compartment* newCompartment) {
+            compartments->insert(pair<string, Compartment*> (name, newCompartment) );
+		};
+        void addConnection(string name, Connection* newConnection) {
+            connections->insert(pair<string, Connection*> (name, newConnection) );
+		};
 		ComplexNeuron(map<string, Compartment*>* compartments_, map<string, Connection*>* connections_);
-                void addCompartment(string name, Compartment* newCompartment) {
-                    compartments->insert(pair<string, Compartment*> (name, newCompartment) );
-		};
-                void addConnection(string name, Connection* newConnection) {
-                    connections->insert(pair<string, Connection*> (name, newConnection) );
-		};
 		~ComplexNeuron();
 		void integrate(double, double);
 		Compartment* getCompartmentbyName(string);
@@ -111,7 +111,7 @@ namespace complex_neurons {
 	};
 };
 
-namespace synapses {
+namespace synapses_models {
     class OriginSynapse {
     public:
 
@@ -130,6 +130,7 @@ namespace synapses {
         void integrate(double);
     protected:
         double Erev, tau, S, gbarS;
+        
 
     };
 
@@ -138,19 +139,20 @@ namespace synapses {
 namespace networks {
     class Network{
     public:
-        Network(){
-            cout << "Test1" << endl;
-            neurons = new vector<complex_neurons::ComplexNeuron*>;
-            synapses = new vector<synapses::OriginSynapse*>;
+        Network(){ 
+			cout << "Tsst 1" << endl;
+            neurons = new vector<complex_neurons::ComplexNeuron*>();
+            synapses = new vector<synapses_models::OriginSynapse*>();
         };
-        Network( vector<complex_neurons::ComplexNeuron*>*, vector<synapses::OriginSynapse*>*   );
+        Network( vector<complex_neurons::ComplexNeuron*>*, vector<synapses_models::OriginSynapse*>*   );
         ~Network(){};
         void integrate(double, double);
+        void init();
         void addNeuron(complex_neurons::ComplexNeuron* newNeuron){neurons->push_back(newNeuron);};
-        void addSynapse(synapses::OriginSynapse* newSynapse){ synapses->push_back(newSynapse); };
-    protected:
+        void addSynapse(synapses_models::OriginSynapse* newSynapse){ synapses->push_back(newSynapse); };
+    private:
         vector<complex_neurons::ComplexNeuron*>* neurons;
-        vector<synapses::OriginSynapse*>*  synapses;
+        vector<synapses_models::OriginSynapse*>* synapses;
     };
 
 }

@@ -3,14 +3,12 @@
 main script
 """
 
-import lib
+import lib2 as lib
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 soma_params = {
-    "name" : "soma",
-    "params" : {
         "V0": 0.0,
         "C" : 3.0,
         "Iextmean": 0.0,        
@@ -28,13 +26,11 @@ soma_params = {
         "gbarK_C " : 15.0,
         "gl": 0.1,
         "gbarCa": 6.0,
-    }
+    
 }
 
 
 dendrite_params = {
-    "name": "dendrite",
-    "params": {
         "V0": 0.0,
         "C" : 3.0,
         "Iextmean": 1.25,        
@@ -52,11 +48,9 @@ dendrite_params = {
         "gbarK_C " : 5.0,
         "gl": 0.1,
         "gbarCa": 5.0,
-    }
 }
 
 connection_params = {
-    "name": "soma-dendrite", 
     "compartment1": "soma",
     "compartment2": "dendrite",
     "p": 0.5,
@@ -81,14 +75,8 @@ Nn = 20
 Ns = 30
 
 for idx in range(Nn):
-    soma = {
-        "name": "soma",
-        "params" : soma_params.copy()
-    }
-    dendrite = {
-        "name" : "dendrite",
-        "params": dendrite_params.copy() 
-    }
+    soma = {"soma" : soma_params.copy()}
+    dendrite = {"dendrite" : dendrite_params.copy()}
     connection = connection_params.copy()
     neuron = {
         "compartments" : [soma, dendrite],
@@ -106,5 +94,6 @@ for idx in range(Ns):
     }
     synapses.append(synapse)
   
-net = lib.pyNetwork(neurons, synapses) 
-net.integrate(0.1, 1)
+net = lib.Network(neurons, synapses) #
+net.integrate(0.1, 1000)
+#plt.plot(com.getVhist())

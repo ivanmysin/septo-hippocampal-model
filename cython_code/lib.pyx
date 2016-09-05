@@ -7,7 +7,7 @@ from libcpp.pair cimport pair
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 cimport numpy as np
-import numpy as np
+
 
 
 cdef extern from "Neurons.h" namespace "complex_neurons":
@@ -33,52 +33,68 @@ cdef extern from "Neurons.h" namespace "complex_neurons":
         
         
         
-cdef extern from "Neurons.h" namespace "synapses":
+cdef extern from "Neurons.h" namespace "synapses_models":
     cdef cppclass OriginSynapse:
         OriginSynapse()  except +
         void integrate(double)
     cdef cppclass SimpleSynapse:
         SimpleSynapse() except +
-        SimpleSynapse(map[string, double]) except +
+        SimpleSynapse(Compartment*, Compartment*, map[string, double]) except +
         void integrate(double)
     
-    
-cdef extern from "Neurons.h" namespace "synapses":
-    cdef cppclass OriginSynapse:
-        OriginSynapse()  except +
-        void integrate(double)
-    cdef cppclass SimpleSynapse:
-        SimpleSynapse() except +
-        SimpleSynapse(ComplexNeuron*, ComplexNeuron*, map[string, double]) except +
-        void integrate(double)
-        
+   
 cdef extern from "Neurons.h" namespace "networks":
     cdef cppclass Network:
-        Network() except +
-        Network(vector [ComplexNeuron*]*, vector [OriginSynapse*]*)  except +
+        Network()
+        Network(vector [ComplexNeuron*]*, vector [OriginSynapse*]*)
+        void init()
         void integrate(double, double)
         void addNeuron(ComplexNeuron*)
-        void addSynapse(OriginSynapse*)
-        vector [ComplexNeuron*]* neurons
-        vector [OriginSynapse*]* synapses
+        void addSynapse(SimpleSynapse*)
+
+        
         
 cdef class pyNetwork:
-    cdef Network* net
-    
+    #  cdef Network* net
+    cdef vector [ComplexNeuron*]* neurons 
+    cdef vector [SimpleSynapse*]* synapses 
+   
     def __cinit_(self, neurons_params, synapses_params):
         
-        cdef vector [ComplexNeuron*]* neurons = new vector [ComplexNeuron*]()
-        cdef vector [OriginSynapse*]* synapses = new vector [OriginSynapse*]()
-        self.net = new Network(neurons, synapses)
         
-        for idx in range(len(neurons_params)):
-            pass
+        # self.net = new Network()
+        self.neurons = new vector [ComplexNeuron*]()
+        self.synapses = new vector [SimpleSynapse*]()
         
+        # ComplexNeuron(map[string, Compartment*]*, map[string, Connection*]*)
+        cdef string compartment_name
+        
+        cdef pyComplexNeuron neuron
+        cdef SimpleSynapse* synapse
+        #for one_neuron in neurons_params:
+        neuron = pyComplexNeuron(neurons_params[0]["compartments"], neurons_params[0]["connections"])
+        # print (neuron.getVhistByCompartmentName("soma"))
+        self.neurons.push_back( neuron.getCppObj() )
+                
+        cdef map[string, double] syn_params
+        cdef pair [string, double] syn_params_pair
+        cdef Compartment* pre
+        cdef Compartment* post
+        cdef int idx = 0
         for idx in range(len(synapses_params)):
-            pass
-        
+            pre  = self.neurons.at(synapses_params[idx]["pre_ind"]).getCompartmentbyName(synapses_params[idx]["pre_compartment_name"].encode("UTF-8"))
+            post = self.neurons.at(synapses_params[idx]["post_ind"]).getCompartmentbyName(synapses_params[idx]["post_compartment_name"].encode("UTF-8"))
+            for key, value in synapses_params[idx]["params"].items():
+                syn_params_pair.first = key.encode("UTF-8")
+                syn_params_pair.second = value
+                syn_params.insert(syn_params_pair)
+            synapse = new SimpleSynapse(pre, post, syn_params)
+            self.synapses.push_back(synapse)
+            
     def integrate(self, double dt, double duration):
-        self.net.integrate(dt, duration)
+        #self.net.init()
+        #self.net.integrate(dt, duration)
+        print ("Hello")
         
 cdef class pyCompartment:
     # cdef Compartment comp  
@@ -172,6 +188,9 @@ cdef class pyComplexNeuron:
         for idx in range(N):
             Vhist_[idx] = Vhist[idx]
         return Vhist_
+    
+    cdef ComplexNeuron* getCppObj(self):
+        return self.neuron
 
         
         

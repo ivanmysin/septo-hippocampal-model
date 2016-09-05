@@ -104,6 +104,7 @@ for idx in range(Ns):
        "post_compartment_name" : "soma",
        "params": ext_synapce_params.copy()
     }
+    synapses.append(synapse)
   
 net = lib.pyNetwork(neurons, synapses) 
 net.integrate(0.1, 1)

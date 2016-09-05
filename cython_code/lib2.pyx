@@ -27,11 +27,14 @@ cdef class OriginCompartment:
     cdef void setIext(self, double Iext):
         self.Iext = Iext
         
-    cdef void addIsyn(self, double Isyn):
+    def addIsyn(self, double Isyn):
         self.Isyn += Isyn
         
     def getVhist(self):
         return self.Vhist
+    
+    def getFiring(self):
+        return self.firing
         
     cdef void integrate(self, double dt, double duration):
         pass
@@ -72,7 +75,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         
         self.Vhist = np.array([])
         self.firing = np.array([])
-        self.th = -20
+        self.th = self.El + 40
         
         self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
         self.h = self.alpha_h() / (self.alpha_h() + self.beta_h())
@@ -264,7 +267,6 @@ cdef class ComplexNeuron:
     
     def __cinit__(self, list compartments, list connections):
         self.compartments = dict()
-        # cdef  comp
         
         for comp in compartments:
             key, value = comp.popitem() 
@@ -275,14 +277,11 @@ cdef class ComplexNeuron:
         for conn in connections:
             self.connections.append(IntercompartmentConnection(self.compartments[conn["compartment1"]], self.compartments[conn["compartment2"]], conn["g"], conn["p"]   ) )
         
+    def getCompartmentsNames(self):
+        return self.compartments.keys()
     
     def integrate(self, double dt, double duration):
         cdef double t = 0
-        
-        # cdef map[string, OriginCompartment*].iterator comps_end = self.compartments.end()
-        # cdef map[string, OriginCompartment*].iterator coms_it = self.compartments.begin()
-        
-        #cdef vector[IntercompartmentConnection].iterator conn_it = cpp_set.begin()
         
         while(t < duration):
             for p in self.compartments.values():
@@ -293,15 +292,16 @@ cdef class ComplexNeuron:
             
             t += dt
             
-    cdef OriginCompartment getCompartmentByName(self, string name): 
+    def getCompartmentByName(self, name): 
         return self.compartments[name]
-
+        
+    
 cdef class OriginSynapse:
     cdef OriginCompartment pre
     cdef OriginCompartment post
     cdef double W
     
-    def __cinit__(self, params):
+    def __cinit__(self, OriginCompartment pre, OriginCompartment post, params):
         pass
     
     def integrate(self, double dt):
@@ -332,7 +332,7 @@ cdef class SimpleSynapse(OriginSynapse):
             return
     
         cdef double Vpost = self.post.getV()
-        cdef double Isyn = self.w * self.gbarS * self.S * (Vpost - self.Erev)
+        cdef double Isyn = -self.w * self.gbarS * self.S * (Vpost - self.Erev)
         self.post.addIsyn(Isyn) #  Isyn for post neuron
         
         cdef double k1 = self.S
@@ -355,32 +355,61 @@ cdef class Network:
         for idx in range(length):
             neuron = ComplexNeuron(neuron_params[idx]["compartments"], neuron_params[idx]["connections"])
             self.neurons.append(neuron)
-    
         length = len(synapse_params)
-
-        for idx in range(length):
+        
+        idx = 0
+        while (idx < length):
             synapse = SimpleSynapse(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
             self.synapses.append(synapse)
+            idx += 1
     
-    
-    def integrate(self, double dt, double duration):
+    def integrate(self, double dt, double duration, iext_function):
         cdef double t = 0
-        
-
+        cdef double Iext_model
         while(t < duration):
-            for n in self.neurons:
+            for neuron_ind, n in enumerate(self.neurons):
+                for compartment_name in n.getCompartmentsNames():
+                    Iext_model = iext_function(neuron_ind, compartment_name, t)
+                    n.getCompartmentByName(compartment_name).addIsyn( Iext_model )
+                                
                 n.integrate(dt, dt)
+                n.getCompartmentByName("soma").checkFired(t)
                 
             for s in self.synapses:
-                s.integrate()
+                s.integrate(dt)
             
             t += dt
             
-    def addNeuron(self, newNeuron):
-        pass
+    def getVhist(self):
+        V = []
+        for n in self.neurons:
+            Vn = dict()
+            for key in n.getCompartmentsNames():
+                Vn[key] = n.getCompartmentByName(key).getVhist()
+            
+            V.append(Vn)
+            
+        return V
+
+    def getFiring(self):
+        firing = np.empty((2, 0), dtype=np.float64)
+        for idx, n in enumerate(self.neurons):
+            fired = n.getCompartmentByName("soma").getFiring()
+            fired_n = np.zeros_like(fired) + idx + 1
+            
+            firing = np.append(firing, [fired, fired_n], axis=1)
+            
+            
+        return firing
+
+
+
+        
+    def addIextbyT(self, double t):
+        pass 
+        
     
-    def addSynapse(self, newSynapse):
-        pass
+
     
     
     

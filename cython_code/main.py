@@ -5,6 +5,7 @@ main script
 
 import lib2 as lib
 import numpy as np
+from  scipy.signal import medfilt
 import matplotlib.pyplot as plt
 
 class SimmulationParams:
@@ -176,6 +177,7 @@ def run_model(iext_function):
     
     plt.figure()
     Vsomahalf = VmeanSoma[t > duration/2]
+    Vsomahalf = medfilt(Vsomahalf, 251)
     fft_y = np.abs(np.fft.rfft(Vsomahalf))/Vsomahalf.size
     fft_x = np.fft.rfftfreq(Vsomahalf.size, 0.001*dt)
     plt.plot(fft_x[1:], fft_y[1:])
@@ -192,6 +194,7 @@ def run_model(iext_function):
 saving_fig_path = "/home/ivan/Data/modeling_septo_hippocampal_model/"
 sim = SimmulationParams()
 
+"""
 # variate frequency from septum
 theta_power = np.zeros([20, 5], dtype=float)
 p = np.linspace(1, 20, 20)
@@ -214,7 +217,7 @@ plt.ylabel("theta power on soma")
 plt.xlabel("frequency of septum output")
 plt.savefig(saving_fig_path + "variate_septum_frequency.png")
 plt.show()
-
+"""
 
 
 # one rhytm
@@ -223,7 +226,7 @@ theta_power = np.zeros([30], dtype=float)
 sim.set_mode("only_one_rhytm")
 sim.set_params([1, 1])
 
-for idx in range(20):
+for idx in range(30):
     if (idx == 10):
         sim.set_params([1, 0])
 
@@ -238,12 +241,12 @@ for idx in range(20):
 
 plt.figure()
 plt.boxplot( [theta_power[0:10], theta_power[10:20], theta_power[20:30]] )
-plt.xticks([1, 2, 3], ["controle", "-denddrite", "-soma"])
+plt.xticks([1, 2, 3], ["control", "-dendrite", "-soma"])
 plt.ylabel("theta power on soma")
 plt.savefig(saving_fig_path + "one_rhythm.png")
 plt.show()
 
-
+"""
 # phase difference research
 sim.set_mode("different_phase_shift")
 sim.set_params([0, 1])
@@ -271,7 +274,7 @@ plt.ylabel("theta power on soma")
 plt.xlabel("phase shift, rad")
 plt.savefig(saving_fig_path + "phase_shift.png")
 plt.show()
-
+"""
 
 
 

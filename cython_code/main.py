@@ -8,37 +8,60 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class SimmulationParams:
-    def __init__(self, params=None):
+    def __init__(self, params=None, mode="default"):
         self.p = params
+        self.mode = mode
       
     # variate frequency from septum 
     def iext_function(self, neuron_ind, compartment_name, t):
         t = 0.001 * t
         Iext = 0
-        if compartment_name == "soma":
-            Iext = 2 * np.cos(2 * np.pi * t * self.p) - 2
+        if self.mode == "default":
+            return 0
+        
+        if self.mode == "variate_frequency":
+
+            if compartment_name == "soma":
+                Iext = np.cos(2 * np.pi * t * self.p) - 1
+           
+            if compartment_name == "dendrite":
+                Iext = np.cos(2 * np.pi * t * self.p + 2.65) - 1
+            Iext *= 2
+            return Iext
+        
+        # one rhytm
+        if self.mode == "only_one_rhytm":
+  
+            if compartment_name == "soma":
+                Iext = self.p[0] * np.cos(2 * np.pi * t * 8) - 1
+                
+            if compartment_name == "dendrite":
+                Iext = self.p[1] * np.cos(2 * np.pi * t * 8 + 2.65) - 1
             
+            if Iext == 0:
+                Iext = -np.random.rand()
+            Iext *= 2
+            return Iext
         
-        if compartment_name == "dendrite":
-            Iext = 2 * np.cos(2 * np.pi * t * self.p + 2.65) - 2
-        
-        return Iext
-    """
-    # one rhytm
-    def iext_function(self, neuron_ind, compartment_name, t):
-        Iext = 0
+        if self.mode == "different_phase_shift":
+            
+            if compartment_name == "soma":
+                Iext = np.cos(2 * np.pi * t * 6) - 1
+                
+            if compartment_name == "dendrite":
+                Iext = np.cos(2 * np.pi * t * 6 + self.p) - 1
+            Iext *= 2
+            return Iext
+            
+        return 0
     
-        if compartment_name == "soma":
-            Iext = self.p[0] * 2 * np.cos(2*np.pi*t*8) - 2
-            
-        if compartment_name == "dendrite":
-            Iext = self.p[1] * 2 * np.cos(2*np.pi*t*8 + 2.65) - 2
-        
-        return Iext
-    """   
+    
     def set_params(self, params):
         self.p = params
         print (self.p)
+    
+    def set_mode(self, mode):
+        self.mode = mode
 
 def run_model(iext_function):
     soma_params = {
@@ -105,11 +128,11 @@ def run_model(iext_function):
     for idx in range(Nn):
         soma = {"soma" : soma_params.copy()}
         soma["soma"]["V0"] = 5 * np.random.randn()
-        #soma["soma"]["Iextmean"] += 0.1*np.random.randn()
+        soma["soma"]["Iextmean"] += 0.5*np.random.randn()
         
         dendrite = {"dendrite" : dendrite_params.copy()}
         dendrite["dendrite"]["V0"] = soma["soma"]["V0"]
-        #dendrite["dendrite"]["Iextmean"] += 0.1*np.random.randn()
+        dendrite["dendrite"]["Iextmean"] += 0.5*np.random.randn()
        
         connection = connection_params.copy()
         neuron = {
@@ -167,46 +190,45 @@ def run_model(iext_function):
     print (theta_power)
     return theta_power
 saving_fig_path = "/home/ivan/Data/modeling_septo_hippocampal_model/"
-
+sim = SimmulationParams()
 
 # variate frequency from septum
 theta_power = np.zeros([20, 5], dtype=float)
 p = np.linspace(1, 20, 20)
-
-sim = SimmulationParams()
+sim.set_mode("variate_frequency")
 idx2 = -1
 idx3 = 0
 for idx in range(100):
     if (idx%5 == 0):
         idx2 += 1
-        sim.set_params(p[idx2])
+        sim.set_params(p[idx2]) 
         
         idx3 = 0
     theta = run_model(sim.iext_function)
     theta_power[idx2, idx3] = theta
     idx3 += 1
 
-    
-
 plt.figure()
 plt.boxplot(theta_power.T)
-plt.savefig(saving_fig_path + "variate_septum_frequency_without_iextmean_var.png")
+plt.ylabel("theta power on soma")
+plt.xlabel("frequency of septum output")
+plt.savefig(saving_fig_path + "variate_septum_frequency.png")
 plt.show()
 
 
 
-
-
-
-"""
 # one rhytm
-theta_power = np.zeros([20], dtype=float)
+theta_power = np.zeros([30], dtype=float)
 
-sim = SimmulationParams([0, 1])
+sim.set_mode("only_one_rhytm")
+sim.set_params([1, 1])
 
 for idx in range(20):
     if (idx == 10):
         sim.set_params([1, 0])
+
+    if (idx == 20):
+        sim.set_params([0, 1])
 
     theta = run_model(sim.iext_function)
     theta_power[idx] = theta
@@ -215,17 +237,21 @@ for idx in range(20):
     
 
 plt.figure()
-plt.boxplot( [theta_power[0:10], theta_power[10:]] )
-plt.savefig(saving_fig_path + "one_rhytm.png")
+plt.boxplot( [theta_power[0:10], theta_power[10:20], theta_power[20:30]] )
+plt.xticks([1, 2, 3], ["controle", "-denddrite", "-soma"])
+plt.ylabel("theta power on soma")
+plt.savefig(saving_fig_path + "one_rhythm.png")
 plt.show()
-"""
 
-"""
+
 # phase difference research
+sim.set_mode("different_phase_shift")
+sim.set_params([0, 1])
+
 theta_power = np.zeros([20, 5], dtype=float)
 p = np.linspace(-np.pi, np.pi, 20)
 
-sim = SimmulationParams()
+
 idx2 = -1
 idx3 = 0
 for idx in range(100):
@@ -240,10 +266,12 @@ for idx in range(100):
     
 
 plt.figure()
-plt.plot(p, np.mean(theta_power, axis=1))
+plt.errorbar(p, np.mean(theta_power, axis=1), yerr=np.std(theta_power, axis=1), fmt='o')
+plt.ylabel("theta power on soma")
+plt.xlabel("phase shift, rad")
 plt.savefig(saving_fig_path + "phase_shift.png")
 plt.show()
-"""
+
 
 
 

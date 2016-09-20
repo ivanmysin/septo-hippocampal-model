@@ -27,7 +27,7 @@ class SimmulationParams:
            
             if compartment_name == "dendrite":
                 Iext = np.cos(2 * np.pi * t * self.p + 2.65) - 1
-            Iext *= 2
+            # Iext *= 2
             return Iext
         
         # one rhytm
@@ -41,7 +41,7 @@ class SimmulationParams:
             
             if Iext == 0:
                 Iext = -np.random.rand()
-            Iext *= 2
+            #Iext *= 2
             return Iext
         
         if self.mode == "different_phase_shift":
@@ -51,7 +51,7 @@ class SimmulationParams:
                 
             if compartment_name == "dendrite":
                 Iext = np.cos(2 * np.pi * t * 6 + self.p) - 1
-            Iext *= 2
+            #Iext *= 2
             return Iext
             
         return 0
@@ -59,7 +59,7 @@ class SimmulationParams:
     
     def set_params(self, params):
         self.p = params
-        print (self.p)
+        
     
     def set_mode(self, mode):
         self.mode = mode
@@ -90,7 +90,7 @@ def run_model(iext_function):
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.5,        
+            "Iextmean": -0.8,        
             "Iextvarience": 1.0,
             "ENa": 120.0,
             "EK": -15.0,
@@ -120,7 +120,17 @@ def run_model(iext_function):
         "tau" : 2.0,
         "w" : 10.0,
     }
-    ###########################
+
+    inh_synapse_params = {
+        "Erev" : -75.0,
+        "gbarS": 0.005,
+        "tau" : 2.0,
+        "w" : 10.0,
+    }
+    
+    
+    
+    ##########################
     neurons = []
     synapses = []
     Nn = 100
@@ -175,11 +185,14 @@ def run_model(iext_function):
     plt.subplot(212)
     plt.plot(t, VmeanDendrite, "r")
     
+    lfp = net.getLFP()
     plt.figure()
-    Vsomahalf = VmeanSoma[t > duration/2]
-    Vsomahalf = medfilt(Vsomahalf, 251)
-    fft_y = np.abs(np.fft.rfft(Vsomahalf))/Vsomahalf.size
-    fft_x = np.fft.rfftfreq(Vsomahalf.size, 0.001*dt)
+    plt.plot(t, lfp)
+    lfp_half = VmeanSoma[t > duration/2]
+    lfp_half = medfilt(lfp_half, 251)
+    fft_y = np.abs(np.fft.rfft(lfp_half))/lfp_half.size
+    fft_x = np.fft.rfftfreq(lfp_half.size, 0.001*dt)
+    plt.figure()
     plt.plot(fft_x[1:], fft_y[1:])
     plt.xlim(2, 50)
     
@@ -226,7 +239,7 @@ theta_power = np.zeros([30], dtype=float)
 sim.set_mode("only_one_rhytm")
 sim.set_params([1, 1])
 
-for idx in range(30):
+for idx in range(1):
     if (idx == 10):
         sim.set_params([1, 0])
 

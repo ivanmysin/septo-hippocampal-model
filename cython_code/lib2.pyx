@@ -17,6 +17,7 @@ cimport numpy as np
 cdef class OriginCompartment:
     cdef  double V, Isyn, Iext
     cdef np.ndarray Vhist
+    cdef np.ndarray LFP
     cdef np.ndarray firing
     def __cinit__(self, params):
         pass
@@ -32,6 +33,9 @@ cdef class OriginCompartment:
         
     def getVhist(self):
         return self.Vhist
+    
+    def getLFP(self):
+        return self.LFP
     
     def getFiring(self):
         return self.firing
@@ -74,6 +78,8 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         self.gbarCa = params["gbarCa"]
         
         self.Vhist = np.array([])
+        self.LFP = np.array([])
+        
         self.firing = np.array([])
         self.th = self.El + 40
         
@@ -215,20 +221,19 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         while (t < duration):
             self.Vhist = np.append(self.Vhist, self.V)
             
-            self.V += dt * (-self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn + self.Iext) / self.Capacity
+            lfp = (self.Il + self.INa + self.IK_DR + self.IK_AHP + self.IK_C + self.ICa + self.Isyn - self.Iext) / (2 * np.pi * 0.3)
+            self.LFP = np.append(self.LFP, lfp)
             
+            self.V += dt * (-self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn + self.Iext) / self.Capacity
+     
             self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
             self.h = self.h_integrate(dt)
             self.n = self.n_integrate(dt)
             self.s = self.s_integrate(dt)
             self.c = self.c_integrate(dt)
             self.q = self.q_integrate(dt)
-            
             self.CCa = self.CCa_integrate(dt)
-       
-       
-       
-       
+     
             self.calculate_currents()
              
             t += dt
@@ -386,10 +391,16 @@ cdef class Network:
             Vn = dict()
             for key in n.getCompartmentsNames():
                 Vn[key] = n.getCompartmentByName(key).getVhist()
-            
             V.append(Vn)
-            
         return V
+
+    def getLFP(self, layer_name="soma"):
+        lfp = 0
+        for n in self.neurons:
+            lfp += n.getCompartmentByName("soma").getLFP()
+        return lfp
+
+
 
     def getFiring(self):
         firing = np.empty((2, 0), dtype=np.float64)

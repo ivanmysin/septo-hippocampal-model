@@ -51,6 +51,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
     cdef bool countSp
     cdef double m, h, n, s, c, q
     cdef double INa, IK_DR, IK_AHP, IK_C, ICa, Il
+    cdef double distance
     
     def __cinit__(self, params):
         self.V = params["V0"]
@@ -79,6 +80,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         
         self.Vhist = np.array([])
         self.LFP = np.array([])
+        self.distance = np.random.normal(200, 10)
         
         self.firing = np.array([])
         self.th = self.El + 40
@@ -107,6 +109,26 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         self.ICa = self.gbarCa * self.s * self.s * (self.V - self.ECa)
         self.Iext = np.random.normal(self.Iextmean, self.Iextvarience)
         self.Isyn = 0
+    
+    cdef double ext_current(self):
+        cdef double Il = self.gl * (self.V - self.El - 60)
+        cdef double INa = self.gbarNa * self.m * self.m * self.h * (self.V - self.ENa - 60)
+        cdef double IK_DR = self.gbarK_DR * self.n * (self.V - self.EK - 60)
+        cdef double IK_AHP = self.gbarK_AHP * self.q * (self.V - self.EK - 60)
+        cdef double IK_C = self.gbarK_C * self.c * (self.V - self.EK - 60)
+        
+        
+        cdef double tmp = self.CCa / 250.0
+        if (tmp < 1):
+            self.IK_C *= tmp    
+        
+        cdef double ICa = self.gbarCa * self.s * self.s * (self.V - self.ECa - 60)
+        cdef double Iext = self.Iext
+        cdef double Isyn = self.Isyn
+        
+        cdef double I = Il + INa + IK_DR + IK_AHP + IK_C + ICa - Iext + Isyn
+        
+        return I
 
     cdef double alpha_m(self):
         cdef double x = 13.1 - self.V
@@ -221,7 +243,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         while (t < duration):
             self.Vhist = np.append(self.Vhist, self.V)
             
-            lfp = (self.Il + self.INa + self.IK_DR + self.IK_AHP + self.IK_C + self.ICa + self.Isyn - self.Iext) / (2 * np.pi * 0.3)
+            lfp = self.ext_current() / (2 * np.pi * 0.3 * self.distance)
             self.LFP = np.append(self.LFP, lfp)
             
             self.V += dt * (-self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn + self.Iext) / self.Capacity
@@ -397,7 +419,9 @@ cdef class Network:
     def getLFP(self, layer_name="soma"):
         lfp = 0
         for n in self.neurons:
-            lfp += n.getCompartmentByName("soma").getLFP()
+            for key in n.getCompartmentsNames():
+                # Vn[key] = n.getCompartmentByName(key).getVhist()
+                lfp += n.getCompartmentByName(key).getLFP()
         return lfp
 
 

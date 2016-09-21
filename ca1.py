@@ -498,10 +498,6 @@ class FS_neuron:
          self.gl = params["gl"]   
          self.fi = params["fi"]
          
-         
-         
-         
-         
          self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
          
          self.Vhist = []

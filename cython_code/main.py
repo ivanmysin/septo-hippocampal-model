@@ -6,6 +6,7 @@ main script
 import lib2 as lib
 import numpy as np
 from  scipy.signal import medfilt
+import processingLib as plib
 import matplotlib.pyplot as plt
 
 class SimmulationParams:
@@ -41,7 +42,7 @@ class SimmulationParams:
             
             if Iext == 0:
                 Iext = -np.random.rand()
-            #Iext *= 2
+            Iext *= 0.5
             return Iext
         
         if self.mode == "different_phase_shift":
@@ -186,10 +187,12 @@ def run_model(iext_function):
     plt.plot(t, VmeanDendrite, "r")
     
     lfp = net.getLFP()
+    lfp = plib.butter_bandpass_filter(lfp, 2, 450, 1000/dt, 3)
+    #lfp = medfilt(lfp, 15)
     plt.figure()
     plt.plot(t, lfp)
-    lfp_half = VmeanSoma[t > duration/2]
-    lfp_half = medfilt(lfp_half, 251)
+    lfp_half = lfp[t > duration/2]
+    
     fft_y = np.abs(np.fft.rfft(lfp_half))/lfp_half.size
     fft_x = np.fft.rfftfreq(lfp_half.size, 0.001*dt)
     plt.figure()

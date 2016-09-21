@@ -7,6 +7,6 @@
 /cython_code/lib.cpp
 /cython_code/lib2.cpp
 # ignore pycache
-/__pycache__/
+*/__pycache__/
 # ignore directory
 .directory

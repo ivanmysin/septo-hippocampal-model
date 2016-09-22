@@ -42,8 +42,132 @@ cdef class OriginCompartment:
         
     cdef void integrate(self, double dt, double duration):
         pass
+    def getCompartmentsNames(self):
+        return "soma"
+    def getCompartmentByName(self, name): 
+        return self
 
-       
+cdef class FS_neuron(OriginCompartment):
+    cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El
+    cdef double gbarNa, gbarK, gl, fi
+    cdef double th
+    cdef bool countSp
+    cdef double m, h, n
+    cdef double gNa, gK
+    cdef double distance
+    
+    def __init__(self, params):
+         self.V = params["V0"]
+         self.Iextmean = params["Iextmean"]        
+         self.Iextvarience = params["Iextvarience"]
+         self.ENa = params["ENa"]
+         self.EK = params["EK"]
+         self.El = params["El"]
+         self.gbarNa = params["gbarNa"]
+         self.gbarK = params["gbarK"]
+         self.gl = params["gl"]   
+         self.fi = params["fi"]
+         
+         self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+         
+         self.Vhist = np.array([])
+         self.LFP = np.array([])
+         self.distance = np.random.normal(200, 10)
+         self.firing = np.array([])
+         
+         self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+         self.n = self.alpha_n() / (self.alpha_n() + self.beta_n())
+         self.h = self.alpha_h() / (self.alpha_h() + self.beta_h())
+
+         self.gNa = self.gbarNa * self.m * self.m * self.m * self.h
+         self.gK = self.gbarK * self.n * self.n * self.n * self.n
+
+         self.Isyn = 0
+         self.countSp = True
+         self.th = -20
+    
+    def getLFP(self):
+        return 0
+
+    cdef double alpha_m(self):
+         cdef double  x = -0.1 * (self.V + 33)
+         if (x == 0):
+            x = 0.000000001
+         cdef double alpha = x / ( np.exp(x) - 1 )
+         return alpha
+#########
+    cdef double beta_m(self):
+        cdef double beta = 4 * exp(- (self.V + 58) / 18 )
+        return beta
+
+
+########
+    cdef double alpha_h(self):
+        cdef double alpha = self.fi * 0.07 * np.exp( -(self.V + 51) / 10)
+        return alpha
+
+########
+    cdef double beta_h(self):
+        cdef double beta = self.fi / ( exp(-0.1 * (self.V + 21)) + 1 )
+        return beta
+    
+########
+    cdef double alpha_n(self):
+        cdef double x = -0.1 * (self.V + 38)
+        if ( x==0 ):
+            x = 0.00000000001
+        cdef double alpha = self.fi * 0.1 * x / (exp(x) - 1)
+        return alpha
+#######np.
+
+    cdef double beta_n(self):
+        return (self.fi * 0.125 * np.exp( -(self.V + 48 )/ 80))
+
+#######
+    cdef double h_integrate(self, dt):
+        cdef double h_0 = self.alpha_h() / (self.alpha_h() + self.beta_h())
+        cdef double tau_h = 1 / (self.alpha_h() + self.beta_h())
+        return h_0 -(h_0 - self.h) * np.exp(-dt/tau_h)
+#######
+    cdef double n_integrate(self, dt):
+        cdef double n_0 = self.alpha_n() / (self.alpha_n() + self.beta_n() )
+        cdef double tau_n = 1 / (self.alpha_n() + self.beta_n())
+        return n_0 -(n_0 - self.n) * np.exp(-dt/tau_n)
+#######
+    def integrate (self, double dt, double duraction):
+
+        cdef double t = 0
+        cdef double i = 0
+        while (t < duraction):
+            self.Vhist = np.append(self.Vhist, self.V)
+            
+            self.V = self.V + dt * (self.gNa * (self.ENa - self.V) + self.gK * (self.EK - self.V) + self.gl*(self.El - self.V) - self.Isyn + self.Iext)
+    
+            self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+            self.n = self.n_integrate(dt)
+            self.h = self.h_integrate(dt)
+            
+            self.gNa = self.gbarNa * self.m * self.m * self.m * self.h
+            self.gK = self.gbarK * self.n * self.n * self.n * self.n
+    
+            self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+    
+            self.Isyn = 0
+            i += 1
+            t += dt
+  
+
+########
+    cpdef checkFired(self, double t_):
+    
+        if (self.V >= self.th and self.countSp):
+            self.firing = np.append(self.firing, t_)
+            self.countSp = False
+        
+        if (self.V < self.th):
+            self.countSp = True 
+    
+####################      
 cdef class PyramideCA1Compartment(OriginCompartment):
     cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El, ECa, CCa, sfica, sbetaca
     cdef double gbarNa, gbarK_DR, gbarK_AHP, gbarK_C, gl, gbarCa
@@ -296,7 +420,7 @@ cdef class ComplexNeuron:
         self.compartments = dict()
         
         for comp in compartments:
-            key, value = comp.popitem() 
+            key, value = comp.popitem()
             self.compartments[key] = PyramideCA1Compartment(value)
         
 
@@ -380,7 +504,12 @@ cdef class Network:
         cdef int idx, length
         length = len(neuron_params)
         for idx in range(length):
-            neuron = ComplexNeuron(neuron_params[idx]["compartments"], neuron_params[idx]["connections"])
+            if (neuron_params[idx]["type"] == "pyramide"):
+                neuron = ComplexNeuron(neuron_params[idx]["compartments"], neuron_params[idx]["connections"])
+            
+            if (neuron_params[idx]["type"] == "basket"):
+                neuron = FS_neuron(neuron_params[idx]["compartments"])
+            
             self.neurons.append(neuron)
         length = len(synapse_params)
         

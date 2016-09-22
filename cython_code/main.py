@@ -115,6 +115,19 @@ def run_model(iext_function):
         "g": 1.5,
     }
     
+    basket_fs_neuron = {
+         "V0": -65.0,
+         "Iextmean": 0.5,        
+         "Iextvarience": 0.5,
+         "ENa": 50.0,
+         "EK": -90.0,
+         "El": -65.0,
+         "gbarNa": 55.0,
+         "gbarK": 8.0,
+         "gl": 0.1,   
+         "fi": 10,
+    }
+    
     ext_synapse_params = {
         "Erev" : 60.0,
         "gbarS": 0.005,
@@ -135,6 +148,7 @@ def run_model(iext_function):
     neurons = []
     synapses = []
     Nn = 100
+    Nb = 5 # number of basket cells
     Ns = 300
     
     for idx in range(Nn):
@@ -148,10 +162,18 @@ def run_model(iext_function):
        
         connection = connection_params.copy()
         neuron = {
+            "type" : "pyramide",
             "compartments" : [soma, dendrite],
             "connections" : [connection]
         }
         neurons.append(neuron)
+    
+    for idx in range(Nb):
+         neuron = {
+            "type" : "basket",
+            "compartments" : basket_fs_neuron.copy()
+         }
+         neurons.append(neuron)
         
     for idx in range(Ns):
         pre_ind = np.random.randint(0, Nn)
@@ -175,8 +197,12 @@ def run_model(iext_function):
     VmeanSoma = 0
     VmeanDendrite = 0
     for v in V:
-        VmeanSoma += v["soma"]
-        VmeanDendrite += v["dendrite"]
+        try:
+            VmeanSoma += v["soma"]
+            VmeanDendrite += v["dendrite"]
+        except KeyError:
+            continue
+        
     VmeanSoma /= Nn
     VmeanDendrite /= Nn
     t = np.linspace(0, duration, VmeanSoma.size)

@@ -43,10 +43,195 @@ cdef class OriginCompartment:
     cdef void integrate(self, double dt, double duration):
         pass
     def getCompartmentsNames(self):
-        return "soma"
+        return ["soma"]
     def getCompartmentByName(self, name): 
         return self
+        
+        
+cdef class OLM_cell(OriginCompartment):
+    cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El, EH
+    cdef double gbarNa, gbarK, gl, gbarKa, gbarH
+    cdef double th
+    cdef bool countSp
+    cdef double m, h, n, a, b, r
+    cdef double gNa, gK, gKa, gH
+    cdef double distance
 
+    def __cinit__(self, params):
+         self.V = params["V0"]
+         self.Iextmean = params["Iextmean"]        
+         self.Iextvarience = params["Iextvarience"]
+         self.ENa = params["ENa"]
+         self.EK = params["EK"]
+         self.El = params["El"]
+         self.EH = params["EH"]
+         
+         self.gbarNa = params["gbarNa"]
+         self.gbarK = params["gbarK"]
+         self.gl = params["gl"]   
+         self.gbarKa = params["gbarKa"]
+         self.gbarH = params["gbarH"]         
+         
+         self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+         
+         self.Vhist = np.array([])
+         self.LFP = np.array([])
+         self.distance = np.random.normal(200, 10)
+         self.firing = np.array([])
+         
+         self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+         self.n = self.alpha_n() / (self.alpha_n() + self.beta_n())
+         self.h = self.alpha_h() / (self.alpha_h() + self.beta_h())
+         self.b = self.alpha_b() / (self.alpha_b() + self.beta_b())
+         self.a = self.a_inf()
+         self.r = self.r_inf()
+         
+         
+         self.gNa = self.gbarNa * self.m * self.m * self.m * self.h
+         self.gK = self.gbarK * self.n * self.n * self.n * self.n
+         self.gKa = self.gbarKa * self.a * self.b
+         self.gH = self.gbarH * self.r 
+
+         self.Isyn = 0
+         self.countSp = True
+         self.th = -20
+    
+    cdef double getV(self):
+        return self.V + 60
+
+    def getLFP(self):
+        return 0
+
+    cdef double alpha_m(self):
+         cdef double  x = -0.1 * (self.V + 38)
+         if (x == 0):
+            x = 0.000000001
+         cdef double alpha = x / ( exp(x) - 1 )
+         return alpha
+#########
+    cdef double beta_m(self):
+        cdef double beta = 4 * exp(- (self.V + 63) / 20 )
+        return beta
+
+
+########
+    cdef double alpha_h(self):
+        cdef double alpha = 0.07 * exp( -(self.V + 63) / 20)
+        return alpha
+
+########
+    cdef double beta_h(self):
+        cdef double beta = 1 / ( exp(-0.1 * (self.V + 33)) + 1 )
+        return beta
+    
+########
+    cdef double alpha_n(self):
+        cdef double x =  (self.V - 25)
+        if ( x==0 ):
+            x = 0.00000000001
+        cdef double alpha = -0.018 * x / (exp(-x/25) - 1)
+        return alpha
+#######np.
+
+    cdef double beta_n(self):
+        cdef double x = self.V - 35
+        if ( x==0 ):
+            x = 0.00000000001
+        
+        cdef double beta = 0.0036 * x / (exp(x/12) - 1)
+        return beta
+    
+    cdef double alpha_b(self):
+        cdef double alpha = 0.000009 / exp((self.V - 26)/18.5)
+        return alpha
+
+    cdef double beta_b(self):
+        cdef double beta = 0.014 / (0.2 + exp((self.V + 70)/-11) )
+        return beta
+    
+    cdef double a_inf(self):
+        cdef double x = -(self.V + 14) / 16.6
+        cdef double a_inf = 1 / (1 + exp(x))
+    
+    cdef double a_tau(self):
+        return 5
+        
+    cdef double r_inf(self):
+        cdef double r_inf = 1 / (1 + exp( (self.V + 84)/10.2 ) )
+        return r_inf
+    
+    cdef double r_tau(self):
+        cdef double r_tau = 1 / ( exp(-17.9 - 0.116*self.V) + exp(-1.84 + 0.09*self.V) ) + 100
+        return r_tau
+#######
+    cdef double r_integrate(self, double dt):
+        cdef double r_0 = self.r_inf()
+        cdef double tau_r = self.r_tau()
+        return r_0 - (r_0 - self.r) * exp(-dt/tau_r)
+        
+    cdef double a_integrate(self, double dt):
+        cdef double a_0 = self.a_inf()
+        return a_0 - (a_0 - self.a) * exp( -dt/self.a_tau() )
+    
+    cdef double b_integrate(self, double dt):
+        cdef double b_0 = self.alpha_b() / (self.alpha_b() + self.beta_b())
+        cdef double tau_b = 1 / (self.alpha_b() + self.beta_b())
+        return b_0 - (b_0 - self.b) * exp(-dt/tau_b)
+    
+    cdef double h_integrate(self, double dt):
+        cdef double h_0 = self.alpha_h() / (self.alpha_h() + self.beta_h())
+        cdef double tau_h = 1 / (self.alpha_h() + self.beta_h())
+        return h_0 - (h_0 - self.h) * exp(-dt/tau_h)
+#######
+    cdef double n_integrate(self, double dt):
+        cdef double n_0 = self.alpha_n() / (self.alpha_n() + self.beta_n() )
+        cdef double tau_n = 1 / (self.alpha_n() + self.beta_n())
+        return n_0 - (n_0 - self.n) * exp(-dt/tau_n)
+#######
+    def integrate (self, double dt, double duraction):
+
+        cdef double t = 0
+        cdef double i = 0
+        while (t < duraction):
+            self.Vhist = np.append(self.Vhist, self.V)
+            
+            self.V = self.V + dt * (self.gNa * (self.ENa - self.V) + \
+                                    self.gK * (self.EK - self.V) + \
+                                    self.gl*(self.El - self.V) + \
+                                    self.gKa * (self.EK - self.V) + \
+                                    self.gH * (self.EH - self.V) - \
+                                    self.Isyn + self.Iext)
+    
+            self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+            self.n = self.n_integrate(dt)
+            self.h = self.h_integrate(dt)
+            self.a = self.a_integrate(dt)
+            self.b = self.b_integrate(dt)
+            self.r = self.r_integrate(dt)
+            
+            self.gNa = self.gbarNa * self.m * self.m * self.m * self.h
+            self.gK = self.gbarK * self.n * self.n * self.n * self.n
+            self.gKa = self.gbarKa * self.a * self.b
+            self.gH = self.gbarH * self.r 
+            self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+    
+            self.Isyn = 0
+            i += 1
+            t += dt
+  
+
+########
+    cpdef checkFired(self, double t_):
+    
+        if (self.V >= self.th and self.countSp):
+            self.firing = np.append(self.firing, t_)
+            self.countSp = False
+        
+        if (self.V < self.th):
+            self.countSp = True 
+            
+            
+            
 cdef class FS_neuron(OriginCompartment):
     cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El
     cdef double gbarNa, gbarK, gl, fi
@@ -56,7 +241,7 @@ cdef class FS_neuron(OriginCompartment):
     cdef double gNa, gK
     cdef double distance
     
-    def __init__(self, params):
+    def __cinit__(self, params):
          self.V = params["V0"]
          self.Iextmean = params["Iextmean"]        
          self.Iextvarience = params["Iextvarience"]
@@ -85,7 +270,9 @@ cdef class FS_neuron(OriginCompartment):
          self.Isyn = 0
          self.countSp = True
          self.th = -20
-    
+    cdef double getV(self):
+        return self.V + 60
+        
     def getLFP(self):
         return 0
 
@@ -93,7 +280,7 @@ cdef class FS_neuron(OriginCompartment):
          cdef double  x = -0.1 * (self.V + 33)
          if (x == 0):
             x = 0.000000001
-         cdef double alpha = x / ( np.exp(x) - 1 )
+         cdef double alpha = x / ( exp(x) - 1 )
          return alpha
 #########
     cdef double beta_m(self):
@@ -103,7 +290,7 @@ cdef class FS_neuron(OriginCompartment):
 
 ########
     cdef double alpha_h(self):
-        cdef double alpha = self.fi * 0.07 * np.exp( -(self.V + 51) / 10)
+        cdef double alpha = self.fi * 0.07 * exp( -(self.V + 51) / 10)
         return alpha
 
 ########
@@ -121,18 +308,18 @@ cdef class FS_neuron(OriginCompartment):
 #######np.
 
     cdef double beta_n(self):
-        return (self.fi * 0.125 * np.exp( -(self.V + 48 )/ 80))
+        return (self.fi * 0.125 * exp( -(self.V + 48 )/ 80))
 
 #######
-    cdef double h_integrate(self, dt):
+    cdef double h_integrate(self, double dt):
         cdef double h_0 = self.alpha_h() / (self.alpha_h() + self.beta_h())
         cdef double tau_h = 1 / (self.alpha_h() + self.beta_h())
-        return h_0 -(h_0 - self.h) * np.exp(-dt/tau_h)
+        return h_0 -(h_0 - self.h) * exp(-dt/tau_h)
 #######
-    cdef double n_integrate(self, dt):
+    cdef double n_integrate(self, double dt):
         cdef double n_0 = self.alpha_n() / (self.alpha_n() + self.beta_n() )
         cdef double tau_n = 1 / (self.alpha_n() + self.beta_n())
-        return n_0 -(n_0 - self.n) * np.exp(-dt/tau_n)
+        return n_0 -(n_0 - self.n) * exp(-dt/tau_n)
 #######
     def integrate (self, double dt, double duraction):
 
@@ -233,26 +420,6 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         self.ICa = self.gbarCa * self.s * self.s * (self.V - self.ECa)
         self.Iext = np.random.normal(self.Iextmean, self.Iextvarience)
         self.Isyn = 0
-    
-    cdef double ext_current(self):
-        cdef double Il = self.gl * (self.V - self.El - 60)
-        cdef double INa = self.gbarNa * self.m * self.m * self.h * (self.V - self.ENa - 60)
-        cdef double IK_DR = self.gbarK_DR * self.n * (self.V - self.EK - 60)
-        cdef double IK_AHP = self.gbarK_AHP * self.q * (self.V - self.EK - 60)
-        cdef double IK_C = self.gbarK_C * self.c * (self.V - self.EK - 60)
-        
-        
-        cdef double tmp = self.CCa / 250.0
-        if (tmp < 1):
-            self.IK_C *= tmp    
-        
-        cdef double ICa = self.gbarCa * self.s * self.s * (self.V - self.ECa - 60)
-        cdef double Iext = self.Iext
-        cdef double Isyn = self.Isyn
-        
-        cdef double I = Il + INa + IK_DR + IK_AHP + IK_C + ICa - Iext + Isyn
-        
-        return I
 
     cdef double alpha_m(self):
         cdef double x = 13.1 - self.V
@@ -367,9 +534,8 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         while (t < duration):
             self.Vhist = np.append(self.Vhist, self.V)
             
-            lfp = self.ext_current() / (2 * np.pi * 0.3 * self.distance)
+            lfp = (self.Il + self.INa + self.IK_DR + self.IK_AHP + self.IK_C + self.ICa + self.Isyn - self.Iext) / (2 * np.pi * 0.3 * self.distance)
             self.LFP = np.append(self.LFP, lfp)
-            
             self.V += dt * (-self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn + self.Iext) / self.Capacity
      
             self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
@@ -474,17 +640,21 @@ cdef class SimpleSynapse(OriginSynapse):
 
     cdef void integrate(self, double dt):
         cdef double Vpre = self.pre.getV() # V of pre neuron
-        
+        """
         if (Vpre > 40):
             self.S = 1
+        """
         
+        if (not self.pre.countSp):
+            self.S = 1
+            
         if ( self.S < 0.005 ):
             self.S = 0
             return
     
         cdef double Vpost = self.post.getV()
         cdef double Isyn = self.w * self.gbarS * self.S * (Vpost - self.Erev)
-        self.post.addIsyn(-Isyn) #  Isyn for post neuron
+        self.post.addIsyn(Isyn) #  Isyn for post neuron
         
         cdef double k1 = self.S
         cdef double k2 = k1 - 0.5 * dt * (self.tau * k1)
@@ -509,7 +679,10 @@ cdef class Network:
             
             if (neuron_params[idx]["type"] == "basket"):
                 neuron = FS_neuron(neuron_params[idx]["compartments"])
-            
+                
+            if (neuron_params[idx]["type"] == "olm_cell"):
+                neuron = OLM_cell(neuron_params[idx]["compartments"])
+                
             self.neurons.append(neuron)
         length = len(synapse_params)
         

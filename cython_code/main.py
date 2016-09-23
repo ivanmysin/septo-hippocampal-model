@@ -16,8 +16,22 @@ class SimmulationParams:
       
     # variate frequency from septum 
     def iext_function(self, neuron_ind, compartment_name, t):
+        if (neuron_ind < 10):
+            Iext = -5
+            return Iext
+            
         t = 0.001 * t
         Iext = 0
+        if (neuron_ind >= 100 and neuron_ind < 105):
+            Iext = np.cos(2 * np.pi * t * 8) + 1
+
+        if (neuron_ind >= 105):
+            Iext = np.cos(2 * np.pi * t * 8 + 2.65) + 1
+        return Iext
+                
+        
+        
+        """        
         if self.mode == "default":
             return 0
         
@@ -56,7 +70,7 @@ class SimmulationParams:
             return Iext
             
         return 0
-    
+    """
     
     def set_params(self, params):
         self.p = params
@@ -69,7 +83,7 @@ def run_model(iext_function):
     soma_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.5,        
+            "Iextmean": 0.5,        
             "Iextvarience": 1.0,
             "ENa": 120.0,
             "EK": -15.0,
@@ -87,11 +101,10 @@ def run_model(iext_function):
         
     }
     
-    
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.8,        
+            "Iextmean": 0.8,        
             "Iextvarience": 1.0,
             "ENa": 120.0,
             "EK": -15.0,
@@ -117,7 +130,7 @@ def run_model(iext_function):
     
     basket_fs_neuron = {
          "V0": -65.0,
-         "Iextmean": 0.5,        
+         "Iextmean": 1.5,        
          "Iextvarience": 0.5,
          "ENa": 50.0,
          "EK": -90.0,
@@ -128,6 +141,21 @@ def run_model(iext_function):
          "fi": 10,
     }
     
+    olm_params = {
+    "V0" : -70,
+    "gl" : 0.05,
+    "El" : -70,
+    "gbarNa" : 10.7, 
+    "ENa" : 90,
+    "gbarK" : 31.9,
+    "EK" : -100,
+    "gbarKa" : 16.5,
+    "gbarH" : 0.05,
+    "EH" : -32.9,
+    "Iextmean" : 2,        
+    "Iextvarience": 1,
+    }
+    
     ext_synapse_params = {
         "Erev" : 60.0,
         "gbarS": 0.005,
@@ -136,10 +164,10 @@ def run_model(iext_function):
     }
 
     inh_synapse_params = {
-        "Erev" : -75.0,
+        "Erev" : -15.0,
         "gbarS": 0.005,
-        "tau" : 2.0,
-        "w" : 10.0,
+        "tau" : 5.0,
+        "w" : 100.0,
     }
     
     
@@ -147,13 +175,14 @@ def run_model(iext_function):
     ##########################
     neurons = []
     synapses = []
-    Nn = 100
-    Nb = 5 # number of basket cells
+    Np = 100 # number of pyramide neurons
+    Nb = 5   # number of basket cells
+    Nolm = 5 # number of olm cells
     Ns = 300
     
-    for idx in range(Nn):
+    for idx in range(Np):
         soma = {"soma" : soma_params.copy()}
-        soma["soma"]["V0"] = 5 * np.random.randn()
+        soma["soma"]["V0"] = 0.5 * np.random.randn()
         soma["soma"]["Iextmean"] += 0.5*np.random.randn()
         
         dendrite = {"dendrite" : dendrite_params.copy()}
@@ -174,12 +203,60 @@ def run_model(iext_function):
             "compartments" : basket_fs_neuron.copy()
          }
          neurons.append(neuron)
+         
+    for idx in range(Nolm):
+        neuron = {
+            "type" : "olm_cell",
+            "compartments" : olm_params.copy()
+        }
+        neurons.append(neuron)
         
     for idx in range(Ns):
-        pre_ind = np.random.randint(0, Nn)
-        post_ind = np.random.randint(0, Nn)
+        pre_ind = np.random.randint(0, Np)
+        post_ind = np.random.randint(0, Np)
         if (pre_ind == post_ind):
-            post_ind = np.random.randint(0, Nn)
+            post_ind = np.random.randint(0, Np)
+        synapse = {
+           "pre_ind": pre_ind, 
+           "post_ind": post_ind,
+           "pre_compartment_name": "soma",
+           "post_compartment_name" : "soma",
+           "params": ext_synapse_params.copy()
+        }
+
+        if (pre_ind < 10 and post_ind > 90):
+            synapse["params"]["w"] = 1000
+        
+        synapses.append(synapse)
+    
+    for _ in range(4):
+        for idx in range(Np):
+            pre_ind = np.random.randint(Np, Np + Nb)
+            
+            synapse = {
+               "pre_ind": pre_ind, 
+               "post_ind": idx,
+               "pre_compartment_name": "soma",
+               "post_compartment_name" : "soma",
+               "params": inh_synapse_params.copy()
+            }
+            synapses.append(synapse)
+    
+    for _ in range(4):
+        for idx in range(4):
+            pre_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
+            synapse = {
+               "pre_ind": pre_ind, 
+               "post_ind": idx,
+               "pre_compartment_name": "soma",
+               "post_compartment_name" : "soma",
+               "params": inh_synapse_params.copy()
+            }
+            synapses.append(synapse)
+            
+    for idx in range(Np):
+        pre_ind = idx
+        post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
         synapse = {
            "pre_ind": pre_ind, 
            "post_ind": post_ind,
@@ -188,7 +265,7 @@ def run_model(iext_function):
            "params": ext_synapse_params.copy()
         }
         synapses.append(synapse)
-      
+        
     dt = 0.1
     duration = 1000
     net = lib.Network(neurons, synapses)
@@ -203,8 +280,8 @@ def run_model(iext_function):
         except KeyError:
             continue
         
-    VmeanSoma /= Nn
-    VmeanDendrite /= Nn
+    VmeanSoma /= Np
+    VmeanDendrite /= Np
     t = np.linspace(0, duration, VmeanSoma.size)
     plt.figure()
     plt.subplot(211)
@@ -235,6 +312,9 @@ def run_model(iext_function):
     return theta_power
 saving_fig_path = "/home/ivan/Data/modeling_septo_hippocampal_model/"
 sim = SimmulationParams()
+
+
+
 
 """
 # variate frequency from septum
@@ -287,6 +367,9 @@ plt.xticks([1, 2, 3], ["control", "-dendrite", "-soma"])
 plt.ylabel("theta power on soma")
 plt.savefig(saving_fig_path + "one_rhythm.png")
 plt.show()
+
+
+
 
 """
 # phase difference research

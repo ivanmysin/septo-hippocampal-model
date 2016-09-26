@@ -16,10 +16,8 @@ class SimmulationParams:
       
     # variate frequency from septum 
     def iext_function(self, neuron_ind, compartment_name, t):
-        if (neuron_ind < 10):
-            Iext = -5
-            return Iext
-            
+        return 0
+        """  
         t = 0.001 * t
         Iext = 0
         if (neuron_ind >= 100 and neuron_ind < 105):
@@ -28,7 +26,7 @@ class SimmulationParams:
         if (neuron_ind >= 105):
             Iext = np.cos(2 * np.pi * t * 8 + 2.65) + 1
         return Iext
-                
+        """       
         
         
         """        
@@ -156,18 +154,25 @@ def run_model(iext_function):
     "Iextvarience": 1,
     }
     
+    CosSpikeGeneratorParams = {
+       "freq"  : 8.0, # frequency in Hz
+       "phase" : 0.0, #
+       "latency" :  20.0, # in ms
+       "probability" : 0.2,
+    }    
+    
     ext_synapse_params = {
         "Erev" : 60.0,
         "gbarS": 0.005,
         "tau" : 2.0,
-        "w" : 10.0,
+        "w" : 5.0,
     }
 
     inh_synapse_params = {
         "Erev" : -15.0,
         "gbarS": 0.005,
         "tau" : 5.0,
-        "w" : 100.0,
+        "w" : 30.0,
     }
     
     
@@ -178,7 +183,10 @@ def run_model(iext_function):
     Np = 100 # number of pyramide neurons
     Nb = 5   # number of basket cells
     Nolm = 5 # number of olm cells
-    Ns = 300
+    Ns = 300 # number synapses between pyramide cells
+    NSG = 20 # number of spike generators
+    Ns2in = 20 # number synapses from septal generators to hippocampal interneurons 
+    
     
     for idx in range(Np):
         soma = {"soma" : soma_params.copy()}
@@ -210,6 +218,16 @@ def run_model(iext_function):
             "compartments" : olm_params.copy()
         }
         neurons.append(neuron)
+    
+    for idx in range(NSG):
+        neuron = {
+            "type" : "CosSpikeGenerator", 
+            "compartments" : CosSpikeGeneratorParams.copy()
+        }
+        if (idx >= NSG//2):
+            neuron["compartments"]["phase"] = 2.65
+        
+        neurons.append(neuron)
         
     for idx in range(Ns):
         pre_ind = np.random.randint(0, Np)
@@ -224,9 +242,6 @@ def run_model(iext_function):
            "params": ext_synapse_params.copy()
         }
 
-        if (pre_ind < 10 and post_ind > 90):
-            synapse["params"]["w"] = 1000
-        
         synapses.append(synapse)
     
     for _ in range(4):
@@ -265,7 +280,40 @@ def run_model(iext_function):
            "params": ext_synapse_params.copy()
         }
         synapses.append(synapse)
+    
+    for idx in range(Ns2in):
+        pre_ind = np.random.randint(Np + Nb + Nolm, Np + Nb + Nolm + NSG//2)
+        post_ind = np.random.randint(Np, Np + Nb)
+        synapse = {
+               "pre_ind": pre_ind, 
+               "post_ind": post_ind,
+               "pre_compartment_name": "soma",
+               "post_compartment_name" : "soma",
+               "params": inh_synapse_params.copy()
+            }
+        synapse["params"]["Erev"] = -75
+        synapse["params"]["w"] = 100
+        synapses.append(synapse)
         
+    for idx in range(Ns2in):
+        pre_ind = np.random.randint(Np + Nb + Nolm, Np + Nb + Nolm - NSG//2 + NSG)
+        post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
+        synapse = {
+               "pre_ind": pre_ind, 
+               "post_ind": post_ind,
+               "pre_compartment_name": "soma",
+               "post_compartment_name" : "soma",
+               "params": inh_synapse_params.copy()
+            }
+        synapse["params"]["Erev"] = -75
+        synapse["params"]["w"] = 100
+        synapses.append(synapse)
+    
+    for syn in synapses:
+        print (neurons[syn["pre_ind"]]["type"] + " -> " + neurons[syn["post_ind"]]["type"])
+    return 
+    
+    
     dt = 0.1
     duration = 1000
     net = lib.Network(neurons, synapses)

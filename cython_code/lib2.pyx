@@ -2,7 +2,7 @@
 """
 lib full cython 
 """
-from libc.math cimport exp
+from libc.math cimport exp, cos
 from libcpp.map cimport map
 from libcpp.pair cimport pair
 from libcpp.string cimport string
@@ -40,13 +40,50 @@ cdef class OriginCompartment:
     def getFiring(self):
         return self.firing
         
-    cdef void integrate(self, double dt, double duration):
+    cpdef integrate(self, double dt, double duration):
         pass
+    
     def getCompartmentsNames(self):
         return ["soma"]
+
     def getCompartmentByName(self, name): 
         return self
+ 
+    cpdef checkFired(self, double t_):
+       pass
+
+cdef class CosSpikeGenerator(OriginCompartment):
+    cdef double t, freq, phase, latency, lat, probability
+    
+    def __cinit__(self, params):
+        self.t = 0
+        self.freq = params["freq"] # frequency in Hz
+        self.phase = params["phase"]
+        self.latency = params["latency"] # in ms
+        self.probability = params["probability"] # probability of spike generation in time moment
+        self.firing = np.array([])
         
+    cpdef integrate(self, double dt, double duration):
+
+        self.V = -60
+        self.lat -= dt
+        
+        cdef double signal = cos(2 * np.pi * self.t * self.freq + self.phase)
+        if (signal > 0 and self.lat <= 0 and self.probability > np.random.rand() ):
+            self.V = 50
+            self.lat = self.latency
+            self.firing = np.append(self.firing, 1000 * self.t)
+
+        self.t += 0.001 * dt
+    
+    def getVhist(self):
+        return 0
+        
+    def getLFP(self):
+        return np.zeros(1)
+    
+    def getFiring(self):
+        return self.firing
         
 cdef class OLM_cell(OriginCompartment):
     cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El, EH
@@ -536,6 +573,10 @@ cdef class PyramideCA1Compartment(OriginCompartment):
             
             lfp = (self.Il + self.INa + self.IK_DR + self.IK_AHP + self.IK_C + self.ICa + self.Isyn - self.Iext) / (2 * np.pi * 0.3 * self.distance)
             self.LFP = np.append(self.LFP, lfp)
+            
+            # if (self.Isyn > 10 or self.Isyn < -10):
+            #    print (self.Isyn)
+            
             self.V += dt * (-self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn + self.Iext) / self.Capacity
      
             self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
@@ -547,7 +588,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
             self.CCa = self.CCa_integrate(dt)
      
             self.calculate_currents()
-             
+            self.Isyn = 0
             t += dt
     
     
@@ -621,7 +662,7 @@ cdef class OriginSynapse:
     def __cinit__(self, OriginCompartment pre, OriginCompartment post, params):
         pass
     
-    def integrate(self, double dt):
+    cpdef integrate(self, double dt):
         pass
 
 
@@ -629,33 +670,32 @@ cdef class SimpleSynapse(OriginSynapse):
     cdef double Erev, tau, S, gbarS
     
     def __cinit__(self, OriginCompartment pre, OriginCompartment post, params):
+      
         self.pre = pre
         self.post = post
         
         self.Erev = params["Erev"]
         self.gbarS = params["gbarS"]
         self.tau = params["tau"]
+        self.W = params["w"]
         self.S = 0
 
 
-    cdef void integrate(self, double dt):
+    cpdef integrate(self, double dt):
         cdef double Vpre = self.pre.getV() # V of pre neuron
-        """
+        
         if (Vpre > 40):
             self.S = 1
-        """
-        
-        if (not self.pre.countSp):
-            self.S = 1
-            
+ 
         if ( self.S < 0.005 ):
             self.S = 0
             return
     
         cdef double Vpost = self.post.getV()
-        cdef double Isyn = self.w * self.gbarS * self.S * (Vpost - self.Erev)
+        cdef double Isyn = self.W * self.gbarS * self.S * (Vpost - self.Erev)
         self.post.addIsyn(Isyn) #  Isyn for post neuron
-        
+
+
         cdef double k1 = self.S
         cdef double k2 = k1 - 0.5 * dt * (self.tau * k1)
         cdef double k3 = k2 - 0.5 * dt * (self.tau * k2)
@@ -676,12 +716,15 @@ cdef class Network:
         for idx in range(length):
             if (neuron_params[idx]["type"] == "pyramide"):
                 neuron = ComplexNeuron(neuron_params[idx]["compartments"], neuron_params[idx]["connections"])
-            
+                
             if (neuron_params[idx]["type"] == "basket"):
                 neuron = FS_neuron(neuron_params[idx]["compartments"])
                 
             if (neuron_params[idx]["type"] == "olm_cell"):
                 neuron = OLM_cell(neuron_params[idx]["compartments"])
+            
+            if (neuron_params[idx]["type"] == "CosSpikeGenerator"):
+                neuron = CosSpikeGenerator(neuron_params[idx]["compartments"])
                 
             self.neurons.append(neuron)
         length = len(synapse_params)
@@ -711,7 +754,7 @@ cdef class Network:
             
     def getVhist(self):
         V = []
-        for n in self.neurons:
+        for idx, n in enumerate(self.neurons):
             Vn = dict()
             for key in n.getCompartmentsNames():
                 Vn[key] = n.getCompartmentByName(key).getVhist()
@@ -720,7 +763,7 @@ cdef class Network:
 
     def getLFP(self, layer_name="soma"):
         lfp = 0
-        for n in self.neurons:
+        for idx, n in enumerate(self.neurons):
             for key in n.getCompartmentsNames():
                 # Vn[key] = n.getCompartmentByName(key).getVhist()
                 lfp += n.getCompartmentByName(key).getLFP()
@@ -733,7 +776,6 @@ cdef class Network:
         for idx, n in enumerate(self.neurons):
             fired = n.getCompartmentByName("soma").getFiring()
             fired_n = np.zeros_like(fired) + idx + 1
-            
             firing = np.append(firing, [fired, fired_n], axis=1)
             
             

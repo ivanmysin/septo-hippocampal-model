@@ -17,7 +17,7 @@ class SimmulationParams:
     # variate frequency from septum 
     def iext_function(self, neuron_ind, compartment_name, t):
         return 0
-        """  
+          
         t = 0.001 * t
         Iext = 0
         if (neuron_ind >= 100 and neuron_ind < 105):
@@ -26,7 +26,7 @@ class SimmulationParams:
         if (neuron_ind >= 105):
             Iext = np.cos(2 * np.pi * t * 8 + 2.65) + 1
         return Iext
-        """       
+               
         
         
         """        
@@ -81,8 +81,8 @@ def run_model(iext_function):
     soma_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": 0.5,        
-            "Iextvarience": 1.0,
+            "Iextmean": 0.2,        
+            "Iextvarience": 0.5,
             "ENa": 120.0,
             "EK": -15.0,
             "El": 0.0,
@@ -102,8 +102,8 @@ def run_model(iext_function):
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": 0.8,        
-            "Iextvarience": 1.0,
+            "Iextmean": 0.2,        
+            "Iextvarience": 0.5,
             "ENa": 120.0,
             "EK": -15.0,
             "El": 0.0,
@@ -128,7 +128,7 @@ def run_model(iext_function):
     
     basket_fs_neuron = {
          "V0": -65.0,
-         "Iextmean": 1.5,        
+         "Iextmean": 1.0,        
          "Iextvarience": 0.5,
          "ENa": 50.0,
          "EK": -90.0,
@@ -140,25 +140,25 @@ def run_model(iext_function):
     }
     
     olm_params = {
-    "V0" : -70,
-    "gl" : 0.05,
-    "El" : -70,
-    "gbarNa" : 10.7, 
-    "ENa" : 90,
-    "gbarK" : 31.9,
-    "EK" : -100,
-    "gbarKa" : 16.5,
-    "gbarH" : 0.05,
-    "EH" : -32.9,
-    "Iextmean" : 2,        
-    "Iextvarience": 1,
+        "V0" : -70,
+        "gl" : 0.05,
+        "El" : -70,
+        "gbarNa" : 10.7, 
+        "ENa" : 90,
+        "gbarK" : 31.9,
+        "EK" : -100,
+        "gbarKa" : 16.5,
+        "gbarH" : 0.05,
+        "EH" : -32.9,
+        "Iextmean" : 1.0,        
+        "Iextvarience": 0.5,
     }
     
     CosSpikeGeneratorParams = {
        "freq"  : 8.0, # frequency in Hz
-       "phase" : 0.0, #
-       "latency" :  20.0, # in ms
-       "probability" : 0.2,
+       "phase" : 0.0, # phase in rad
+       "latency" :  10.0, # in ms
+       "probability" : 0.02,
     }    
     
     ext_synapse_params = {
@@ -172,7 +172,7 @@ def run_model(iext_function):
         "Erev" : -15.0,
         "gbarS": 0.005,
         "tau" : 5.0,
-        "w" : 30.0,
+        "w" : 15.0,
     }
     
     
@@ -184,8 +184,8 @@ def run_model(iext_function):
     Nb = 5   # number of basket cells
     Nolm = 5 # number of olm cells
     Ns = 300 # number synapses between pyramide cells
-    NSG = 20 # number of spike generators
-    Ns2in = 20 # number synapses from septal generators to hippocampal interneurons 
+    NSG = 10 # number of spike generators
+    Ns2in = 100 # number synapses from septal generators to hippocampal interneurons 
     
     
     for idx in range(Np):
@@ -210,6 +210,8 @@ def run_model(iext_function):
             "type" : "basket",
             "compartments" : basket_fs_neuron.copy()
          }
+         neuron["compartments"]["V0"] += 10 * np.random.rand()
+         neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
          neurons.append(neuron)
          
     for idx in range(Nolm):
@@ -217,6 +219,8 @@ def run_model(iext_function):
             "type" : "olm_cell",
             "compartments" : olm_params.copy()
         }
+        neuron["compartments"]["V0"] += 10 * np.random.rand()
+        neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
         neurons.append(neuron)
     
     for idx in range(NSG):
@@ -228,7 +232,7 @@ def run_model(iext_function):
             neuron["compartments"]["phase"] = 2.65
         
         neurons.append(neuron)
-        
+    
     for idx in range(Ns):
         pre_ind = np.random.randint(0, Np)
         post_ind = np.random.randint(0, Np)
@@ -244,7 +248,7 @@ def run_model(iext_function):
 
         synapses.append(synapse)
     
-    for _ in range(4):
+    for _ in range(20):
         for idx in range(Np):
             pre_ind = np.random.randint(Np, Np + Nb)
             
@@ -257,8 +261,8 @@ def run_model(iext_function):
             }
             synapses.append(synapse)
     
-    for _ in range(4):
-        for idx in range(4):
+    for _ in range(20):
+        for idx in range(Np):
             pre_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
             synapse = {
                "pre_ind": pre_ind, 
@@ -281,6 +285,7 @@ def run_model(iext_function):
         }
         synapses.append(synapse)
     
+    
     for idx in range(Ns2in):
         pre_ind = np.random.randint(Np + Nb + Nolm, Np + Nb + Nolm + NSG//2)
         post_ind = np.random.randint(Np, Np + Nb)
@@ -291,12 +296,12 @@ def run_model(iext_function):
                "post_compartment_name" : "soma",
                "params": inh_synapse_params.copy()
             }
-        synapse["params"]["Erev"] = -75
-        synapse["params"]["w"] = 100
+        # synapse["params"]["Erev"] = -75
+        synapse["params"]["w"] = 50
         synapses.append(synapse)
-        
+    
     for idx in range(Ns2in):
-        pre_ind = np.random.randint(Np + Nb + Nolm, Np + Nb + Nolm - NSG//2 + NSG)
+        pre_ind = np.random.randint(Np + Nb + Nolm + NSG//2, Np + Nb + Nolm + NSG)
         post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
         synapse = {
                "pre_ind": pre_ind, 
@@ -305,14 +310,17 @@ def run_model(iext_function):
                "post_compartment_name" : "soma",
                "params": inh_synapse_params.copy()
             }
-        synapse["params"]["Erev"] = -75
-        synapse["params"]["w"] = 100
+        # synapse["params"]["Erev"] = -75
+        synapse["params"]["w"] = 50
         synapses.append(synapse)
     
+    
+    """
     for syn in synapses:
         print (neurons[syn["pre_ind"]]["type"] + " -> " + neurons[syn["post_ind"]]["type"])
+        print ( str(syn["pre_ind"]) + " -> " + str(syn["post_ind"]) )
     return 
-    
+    """
     
     dt = 0.1
     duration = 1000
@@ -354,8 +362,31 @@ def run_model(iext_function):
     
     firing = net.getFiring()
     plt.figure()
-    plt.plot(firing[0, :], firing[1, :], '.')
+    
+    cum_it = Np
+    sl = firing[1, :] < cum_it
+    pyr_line, = plt.plot(firing[0, sl], firing[1, sl], '.b', label='Pyramide')
+    
+    sl = (firing[1, :] >= cum_it) & (firing[1, :] <= cum_it+Nb)
+
+    basket_line, = plt.plot(firing[0, sl], firing[1, sl], '.g', label='Basket')
+    cum_it += Nb
+    sl = (firing[1, :] >= cum_it) & (firing[1, :] <= cum_it+Nolm)
+    
+    olm_line, = plt.plot(firing[0, sl], firing[1, sl], '.m', label='OLM')
+    cum_it += Nolm
+    sl = (firing[1, :] > cum_it)
+    
+    septal_line, = plt.plot(firing[0, sl], firing[1, sl], '.r', label='Septum')
+    
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    
     plt.show()
+    
+    
+    
+    
+    
     print (theta_power)
     return theta_power
 saving_fig_path = "/home/ivan/Data/modeling_septo_hippocampal_model/"

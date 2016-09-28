@@ -63,13 +63,13 @@ cdef class CosSpikeGenerator(OriginCompartment):
         self.probability = params["probability"] # probability of spike generation in time moment
         self.firing = np.array([])
         
-    cpdef integrate(self, double dt, double duration):
+    def integrate(self, double dt, double duration):
 
         self.V = -60
         self.lat -= dt
         
         cdef double signal = cos(2 * np.pi * self.t * self.freq + self.phase)
-        if (signal > 0 and self.lat <= 0 and self.probability > np.random.rand() ):
+        if (signal > 0.5 and self.lat <= 0 and self.probability > np.random.rand() ):
             self.V = 50
             self.lat = self.latency
             self.firing = np.append(self.firing, 1000 * self.t)
@@ -267,7 +267,8 @@ cdef class OLM_cell(OriginCompartment):
         if (self.V < self.th):
             self.countSp = True 
             
-            
+    def addIsyn(self, double Isyn):
+        self.Isyn += Isyn   
             
 cdef class FS_neuron(OriginCompartment):
     cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El
@@ -364,7 +365,7 @@ cdef class FS_neuron(OriginCompartment):
         cdef double i = 0
         while (t < duraction):
             self.Vhist = np.append(self.Vhist, self.V)
-            
+          
             self.V = self.V + dt * (self.gNa * (self.ENa - self.V) + self.gK * (self.EK - self.V) + self.gl*(self.El - self.V) - self.Isyn + self.Iext)
     
             self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
@@ -389,7 +390,10 @@ cdef class FS_neuron(OriginCompartment):
             self.countSp = False
         
         if (self.V < self.th):
-            self.countSp = True 
+            self.countSp = True
+    
+    def addIsyn(self, double Isyn):
+        self.Isyn += Isyn
     
 ####################      
 cdef class PyramideCA1Compartment(OriginCompartment):
@@ -691,11 +695,13 @@ cdef class SimpleSynapse(OriginSynapse):
             self.S = 0
             return
     
+        
+            
         cdef double Vpost = self.post.getV()
         cdef double Isyn = self.W * self.gbarS * self.S * (Vpost - self.Erev)
         self.post.addIsyn(Isyn) #  Isyn for post neuron
-
-
+        
+        
         cdef double k1 = self.S
         cdef double k2 = k1 - 0.5 * dt * (self.tau * k1)
         cdef double k3 = k2 - 0.5 * dt * (self.tau * k2)

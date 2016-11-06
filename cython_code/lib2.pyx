@@ -11,11 +11,11 @@ from libcpp cimport bool
 from cython.operator cimport dereference, preincrement
 import numpy as np
 cimport numpy as np
-
+from libcpp.queue cimport queue
 
 
 cdef class OriginCompartment:
-    cdef  double V, Isyn, Iext
+    cdef  double V, Isyn, Iext, Icoms
     cdef np.ndarray Vhist
     cdef np.ndarray LFP
     cdef np.ndarray firing
@@ -24,12 +24,17 @@ cdef class OriginCompartment:
     
     cdef double getV(self):
         return self.V
-       
+        
+    
     cdef void setIext(self, double Iext):
         self.Iext = Iext
         
     def addIsyn(self, double Isyn):
         self.Isyn += Isyn
+    
+    def addIcoms(self, double Icoms):
+        self.Icoms += Icoms  
+    
         
     def getVhist(self):
         return self.Vhist
@@ -52,6 +57,36 @@ cdef class OriginCompartment:
     cpdef checkFired(self, double t_):
        pass
 
+cdef class PoisonSpikeGenerator(OriginCompartment):
+    cdef double t, latency, lat, probability
+    
+    def __cinit__(self, params):
+        self.t = 0
+        self.latency = params["latency"] # in ms
+        self.probability = params["probability"] # probability of spike generation in time moment
+        self.firing = np.array([])
+        self.lat = -self.latency/2
+    def integrate(self, double dt, double duration):
+        self.V = -60
+        self.lat -= dt
+        
+        cdef double tmp = np.random.rand()
+        if (self.lat <= 0 and self.probability > tmp):
+            self.V = 50
+            self.lat = self.latency
+            self.firing = np.append(self.firing, 1000 * self.t)
+
+        self.t += 0.001 * dt
+        
+    def getVhist(self):
+        return 0
+        
+    def getLFP(self):
+        return np.zeros(1)
+    
+    def getFiring(self):
+        return self.firing
+
 cdef class CosSpikeGenerator(OriginCompartment):
     cdef double t, freq, phase, latency, lat, probability
     
@@ -62,6 +97,7 @@ cdef class CosSpikeGenerator(OriginCompartment):
         self.latency = params["latency"] # in ms
         self.probability = params["probability"] # probability of spike generation in time moment
         self.firing = np.array([])
+        self.lat = -self.latency/2
         
     def integrate(self, double dt, double duration):
 
@@ -432,7 +468,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         
         self.Vhist = np.array([])
         self.LFP = np.array([])
-        self.distance = np.random.normal(200, 10)
+        self.distance = np.random.normal(8, 2)
         
         self.firing = np.array([])
         self.th = self.El + 40
@@ -461,6 +497,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         self.ICa = self.gbarCa * self.s * self.s * (self.V - self.ECa)
         self.Iext = np.random.normal(self.Iextmean, self.Iextvarience)
         self.Isyn = 0
+        self.Icoms = 0
 
     cdef double alpha_m(self):
         cdef double x = 13.1 - self.V
@@ -570,18 +607,22 @@ cdef class PyramideCA1Compartment(OriginCompartment):
         cdef double k4 = k1 + dt * (- self.sfica * self.ICa - self.sbetaca * k1)        
         return (k1 + 2*k2 + 2*k3 + k4) / 6
 
-    def integrate(self, double dt, double duration):
+    cpdef integrate(self, double dt, double duration):
         cdef double t = 0
         while (t < duration):
             self.Vhist = np.append(self.Vhist, self.V)
             
-            lfp = (self.Il + self.INa + self.IK_DR + self.IK_AHP + self.IK_C + self.ICa + self.Isyn - self.Iext) / (2 * np.pi * 0.3 * self.distance)
+            I = -self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn - self.Icoms + self.Iext
+            lfp = (I + self.Icoms) / (4 * np.pi * 0.3)
+            # self.Isyn
+            
+           
             self.LFP = np.append(self.LFP, lfp)
             
             # if (self.Isyn > 10 or self.Isyn < -10):
             #    print (self.Isyn)
             
-            self.V += dt * (-self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn + self.Iext) / self.Capacity
+            self.V += dt * I / self.Capacity
      
             self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
             self.h = self.h_integrate(dt)
@@ -620,8 +661,8 @@ cdef class IntercompartmentConnection:
         cdef double Icomp1= (self.g / self.p) * (self.comp1.getV() - self.comp2.getV())
         cdef double Icomp2 = (self.g/(1 - self.p)) * (self.comp2.getV() - self.comp1.getV())
         
-        self.comp1.addIsyn(Icomp1)
-        self.comp2.addIsyn(Icomp2)       
+        self.comp1.addIcoms(Icomp1)
+        self.comp2.addIcoms(Icomp2)       
 
 cdef class ComplexNeuron:
     cdef dict compartments # map [string, OriginCompartment*] compartments
@@ -708,15 +749,64 @@ cdef class SimpleSynapse(OriginSynapse):
         cdef double k4 = k1 - dt * (self.tau * k1)
         
         self.S = (k1 + 2*k2 + 2*k3 + k4) / 6.0 
+
+cdef class SimpleSynapseWithDelay(OriginSynapse):
+    cdef double Erev, tau, S, gbarS, delay
+
+    cdef queue [double] v_delay
+    def __cinit__(self, OriginCompartment pre, OriginCompartment post, params):
+      
+        self.pre = pre
+        self.post = post
+        
+        self.Erev = params["Erev"]
+        self.gbarS = params["gbarS"]
+        self.tau = params["tau"]
+        self.W = params["w"]
+        self.delay = params["delay"]
+        
+        for idx in range(int(self.delay)):
+            self.v_delay.push(-65)
+        
+        self.S = 0
+
+
+    cpdef integrate(self, double dt):
+        # cdef int idx_delay = -int(self.delay + dt) / dt
+        cdef double Vpre = self.pre.getV()
+        self.v_delay.push(Vpre) # V of pre neuron
+        Vpre = self.v_delay.front()
+        self.v_delay.pop()
+        
+        if (Vpre > 40):
+            self.S = 1
  
+        if ( self.S < 0.005 ):
+            self.S = 0
+            return
+    
+        
+            
+        cdef double Vpost = self.post.getV()
+        cdef double Isyn = self.W * self.gbarS * self.S * (Vpost - self.Erev)
+        self.post.addIsyn(Isyn) #  Isyn for post neuron
+        
+        
+        cdef double k1 = self.S
+        cdef double k2 = k1 - 0.5 * dt * (self.tau * k1)
+        cdef double k3 = k2 - 0.5 * dt * (self.tau * k2)
+        cdef double k4 = k1 - dt * (self.tau * k1)
+        
+        self.S = (k1 + 2*k2 + 2*k3 + k4) / 6.0
 
 cdef class Network:
     cdef list neurons
     cdef list synapses
+    cdef double t
     def __cinit__(self, neuron_params, synapse_params):
         self.neurons = list()
         self.synapses = list()
-        
+        self.t = 0
         cdef int idx, length
         length = len(neuron_params)
         for idx in range(length):
@@ -732,31 +822,37 @@ cdef class Network:
             if (neuron_params[idx]["type"] == "CosSpikeGenerator"):
                 neuron = CosSpikeGenerator(neuron_params[idx]["compartments"])
                 
+            if (neuron_params[idx]["type"] == "PoisonSpikeGenerator"):
+                neuron = PoisonSpikeGenerator(neuron_params[idx]["compartments"])
+
             self.neurons.append(neuron)
         length = len(synapse_params)
         
         idx = 0
         while (idx < length):
-            synapse = SimpleSynapse(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
+            synapse = SimpleSynapseWithDelay(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
             self.synapses.append(synapse)
             idx += 1
     
     def integrate(self, double dt, double duration, iext_function):
-        cdef double t = 0
+        
         cdef double Iext_model
-        while(t < duration):
+        while(self.t < duration):
             for neuron_ind, n in enumerate(self.neurons):
+                
+                """
                 for compartment_name in n.getCompartmentsNames():
                     Iext_model = iext_function(neuron_ind, compartment_name, t)
                     n.getCompartmentByName(compartment_name).addIsyn( Iext_model )
-                                
+                """
+                
                 n.integrate(dt, dt)
-                n.getCompartmentByName("soma").checkFired(t)
+                n.getCompartmentByName("soma").checkFired(self.t)
                 
             for s in self.synapses:
                 s.integrate(dt)
-            
-            t += dt
+            # print(t)
+            self.t += dt
             
     def getVhist(self):
         V = []
@@ -770,9 +866,18 @@ cdef class Network:
     def getLFP(self, layer_name="soma"):
         lfp = 0
         for idx, n in enumerate(self.neurons):
+            # lfp += n.getCompartmentByName("soma").getLFP()
+            
+            
             for key in n.getCompartmentsNames():
                 # Vn[key] = n.getCompartmentByName(key).getVhist()
-                lfp += n.getCompartmentByName(key).getLFP()
+                Vext =  n.getCompartmentByName(key).getLFP()
+                if (key == "soma"):
+                    lfp -= Vext
+                else:
+                    lfp -= Vext / 10
+        
+            
         return lfp
 
 
@@ -793,8 +898,15 @@ cdef class Network:
     def addIextbyT(self, double t):
         pass 
         
-    
 
+cpdef testqueue():
+    cdef queue [double] q
+    q.push(2.6)
+    q.push(3.6)
     
+    cdef double a = q.front()
+    q.pop()
+    print (a)
+    print (q.size())
     
     

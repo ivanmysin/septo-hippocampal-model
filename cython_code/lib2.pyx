@@ -12,6 +12,8 @@ from cython.operator cimport dereference, preincrement
 import numpy as np
 cimport numpy as np
 from libcpp.queue cimport queue
+from cython.parallel cimport parallel, prange
+cimport cython
 
 
 cdef class OriginCompartment:
@@ -19,6 +21,7 @@ cdef class OriginCompartment:
     cdef np.ndarray Vhist
     cdef np.ndarray LFP
     cdef np.ndarray firing
+    
     def __cinit__(self, params):
         pass
     
@@ -344,6 +347,7 @@ cdef class FS_neuron(OriginCompartment):
          self.Isyn = 0
          self.countSp = True
          self.th = -20
+         
     cdef double getV(self):
         return self.V + 60
         
@@ -395,7 +399,7 @@ cdef class FS_neuron(OriginCompartment):
         cdef double tau_n = 1 / (self.alpha_n() + self.beta_n())
         return n_0 -(n_0 - self.n) * exp(-dt/tau_n)
 #######
-    def integrate (self, double dt, double duraction):
+    cpdef integrate (self, double dt, double duraction):
 
         cdef double t = 0
         cdef double i = 0
@@ -430,7 +434,64 @@ cdef class FS_neuron(OriginCompartment):
     
     def addIsyn(self, double Isyn):
         self.Isyn += Isyn
-    
+
+cdef class ClusterNeuron(FS_neuron):
+    cdef double gbarKS, gbarH, gKS, gH, Eh, H, p, q
+    def __cinit__(self, params):
+
+        self.Eh = params["Eh"]
+        self.gbarKS = params["gbarKS"]
+        self.gbarH = params["gbarH"]
+        self.H = 1 / (1 + exp( (self.V + 80) / 10) )
+        self.p = 1 / (1 + exp( -(self.V + 34) / 6.5) )
+        self.q = 1 / (1 + exp( (self.V + 65) / 6.6) )
+        self.gKS = self.gbarKS * self.p * self.q
+        self.gH = self.gbarH * self.H
+        
+    cpdef integrate(self, double dt, double duration):
+        cdef double t = 0
+        cdef int i = 0
+        while (t < duration):
+            self.Vhist = np.append(self.Vhist, self.V)
+            self.V = self.V + dt * (self.gNa * (self.ENa - self.V) + 
+                                      self.gK * (self.EK - self.V) + 
+                                      self.gKS * (self.EK - self.V) + 
+                                      self.gH * (self.Eh - self.V) + 
+                                      self.gl*(self.El - self.V) - 
+                                      self.Isyn + self.Iext)
+            self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+            self.n = self.n_integrate(dt)
+            self.h = self.h_integrate(dt)
+            self.H = self.H_integrate(dt)
+            self.p = self.p_integrate(dt)
+            self.q = self.q_integrate(dt)
+              
+            self.gNa = self.gbarNa * self.m * self.m * self.m * self.h
+            self.gK = self.gbarK * self.n * self.n * self.n * self.n
+            self.gH = self.gbarH * self.H
+            self.gKS = self.gbarKS * self.p * self.q
+              
+              
+            self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+            self.Isyn = 0
+            i += 1
+            t += dt
+            
+    cdef double H_integrate(self, double dt):
+        cdef double H_0 = 1 / (1 + exp( (self.V + 80) / 10) )
+        cdef double tau_H = ( 200 / (exp( (self.V + 70) / 20) + exp( -(self.V + 70) / 20))) + 5
+        return H_0 - (H_0 - self.H) * exp(-dt/tau_H)
+          
+    cdef double p_integrate(self, double dt):
+        cdef double p_0 = 1 / (1 + exp(-(self.V + 34) / 6.5) )
+        cdef double tau_p = 6
+        return p_0 - (p_0 - self.p) * exp(-dt/tau_p)
+          
+    cdef double q_integrate(self, double dt):
+        cdef double q_0 = 1 / ( 1 + exp( (self.V + 65) / 6.6) )
+        cdef double tau_q0 = 100
+        cdef double tau_q = tau_q0 * (1 + ( 1 / (1 + exp( -(self.V + 50) / 6.8) ) ) )
+        return q_0 - (q_0 - self.q) * exp(-dt/tau_q)
 ####################      
 cdef class PyramideCA1Compartment(OriginCompartment):
     cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El, ECa, CCa, sfica, sbetaca
@@ -750,6 +811,48 @@ cdef class SimpleSynapse(OriginSynapse):
         
         self.S = (k1 + 2*k2 + 2*k3 + k4) / 6.0 
 
+cdef class ComplexSynapse(OriginSynapse):
+    cdef double teta, K, alpha_s, beta_s, gbarS, S, Erev, delay
+    cdef queue [double] v_delay
+    
+    def __cinit__(self, OriginCompartment pre, OriginCompartment post, params):
+        self.pre = pre
+        self.post = post
+        
+        self.Erev = params["Erev"]
+        self.gbarS = params["gbarS"]
+        self.teta = params["teta"]
+        self.K = params["K"]
+        self.alpha_s = params["alpha_s"]
+        self.beta_s = params["beta_s"]        
+        self.W = params["w"]
+        self.S = 0
+        self.delay = params["delay"]
+        if (self.delay > 0):
+            for idx in range(int(self.delay)):
+                self.v_delay.push(-65)
+        
+    cpdef integrate(self, double dt):
+            
+        cdef double Vpre = self.pre.getV()
+        if (self.delay > 0):
+            self.v_delay.push(Vpre) # V of pre neuron
+            Vpre = self.v_delay.front()
+            self.v_delay.pop()
+            
+            
+        if (Vpre < 40 and self.S < 0.005):
+            self.S = 0
+            return
+        Vpre -= 60
+        cdef double Vpost = self.post.getV()
+        cdef double F = 1 / (1 + exp( -(Vpre - self.teta) / self.K ) )
+        cdef double S_0 = self.alpha_s * F / (self.alpha_s * F + self.beta_s)
+        cdef double tau_s = 1 / (self.alpha_s * F + self.beta_s)
+        self.S = S_0 - (S_0 - self.S) * exp( -dt/tau_s )
+        cdef double Isyn = self.W * self.gbarS * self.S * (Vpost - self.Erev)
+        self.post.addIsyn(Isyn)
+
 cdef class SimpleSynapseWithDelay(OriginSynapse):
     cdef double Erev, tau, S, gbarS, delay
 
@@ -802,6 +905,7 @@ cdef class SimpleSynapseWithDelay(OriginSynapse):
 cdef class Network:
     cdef list neurons
     cdef list synapses
+
     cdef double t
     def __cinit__(self, neuron_params, synapse_params):
         self.neurons = list()
@@ -813,8 +917,11 @@ cdef class Network:
             if (neuron_params[idx]["type"] == "pyramide"):
                 neuron = ComplexNeuron(neuron_params[idx]["compartments"], neuron_params[idx]["connections"])
                 
-            if (neuron_params[idx]["type"] == "basket"):
+            if (neuron_params[idx]["type"] == "FS_Neuron"):
                 neuron = FS_neuron(neuron_params[idx]["compartments"])
+                
+            if (neuron_params[idx]["type"] == "ClusterNeuron"):
+                neuron = ClusterNeuron(neuron_params[idx]["compartments"])
                 
             if (neuron_params[idx]["type"] == "olm_cell"):
                 neuron = OLM_cell(neuron_params[idx]["compartments"])
@@ -830,29 +937,45 @@ cdef class Network:
         
         idx = 0
         while (idx < length):
-            synapse = SimpleSynapseWithDelay(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
+            if (synapse_params[idx]["type"] == "SimpleSynapse"):
+                synapse = SimpleSynapse(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
+
+            if (synapse_params[idx]["type"] == "SimpleSynapseWithDelay"):
+                synapse = SimpleSynapseWithDelay(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
+            
+            if (synapse_params[idx]["type"] == "ComplexSynapse"):
+                synapse = ComplexSynapse(self.neurons[synapse_params[idx]["pre_ind"]].getCompartmentByName(synapse_params[idx]["pre_compartment_name"]), self.neurons[synapse_params[idx]["post_ind"]].getCompartmentByName(synapse_params[idx]["post_compartment_name"]), synapse_params[idx]["params"] )
+            
+            
             self.synapses.append(synapse)
             idx += 1
     
-    def integrate(self, double dt, double duration, iext_function):
+    cpdef integrate(self, double dt, double duration, iext_function):
         
         cdef double Iext_model
+        cdef int NN = len(self.neurons)
+        cdef int NS = len(self.synapses)
+        cdef int s_ind = 0
+        cdef int neuron_ind = 0
         while(self.t < duration):
-            for neuron_ind, n in enumerate(self.neurons):
+            #with nogil, cython.boundscheck(False), cython.wraparound(False):
+                for neuron_ind in range(NN):
+                    
+                    self.neurons[neuron_ind].integrate(dt, dt)
+                    """
+                    for compartment_name in n.getCompartmentsNames():
+                        Iext_model = iext_function(neuron_ind, compartment_name, t)
+                        n.getCompartmentByName(compartment_name).addIsyn( Iext_model )
+                    """
+                    
+                    
+                    self.neurons[neuron_ind].getCompartmentByName("soma").checkFired(self.t)
+                    
+                for s_ind in range(NS):
+                    self.synapses[s_ind].integrate(dt)
                 
-                """
-                for compartment_name in n.getCompartmentsNames():
-                    Iext_model = iext_function(neuron_ind, compartment_name, t)
-                    n.getCompartmentByName(compartment_name).addIsyn( Iext_model )
-                """
-                
-                n.integrate(dt, dt)
-                n.getCompartmentByName("soma").checkFired(self.t)
-                
-            for s in self.synapses:
-                s.integrate(dt)
-            # print(t)
-            self.t += dt
+
+                self.t += dt
             
     def getVhist(self):
         V = []
@@ -876,11 +999,26 @@ cdef class Network:
                     lfp -= Vext
                 else:
                     lfp -= Vext / 10
-        
-            
+
         return lfp
 
-
+    def getfullLFP(self, layer_name="soma"):
+        
+        lfp = []
+        for idx, n in enumerate(self.neurons):
+            
+            keys = n.getCompartmentsNames()
+            if not("dendrite" in keys):
+                continue
+            
+            for key in keys:
+                lfp.append({})
+                Vext =  -1.0 * n.getCompartmentByName(key).getLFP()
+                if (key == "soma"):
+                    lfp[-1]["soma"] = Vext
+                else:
+                    lfp[-1]["dendrite"] = Vext
+        return lfp
 
     def getFiring(self):
         firing = np.empty((2, 0), dtype=np.float64)

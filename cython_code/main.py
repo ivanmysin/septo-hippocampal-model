@@ -86,8 +86,8 @@ def run_model(sim, path):
     soma_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": 2.0,        
-            "Iextvarience": 0.5,
+            "Iextmean": -0.5,        
+            "Iextvarience": 0.2,
             "ENa": 120.0,
             "EK": -15.0,
             "El": 0.0,
@@ -107,8 +107,8 @@ def run_model(sim, path):
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": 1.5,        
-            "Iextvarience": 0.5,
+            "Iextmean": -0.5,        
+            "Iextvarience": 0.2,
             "ENa": 120.0,
             "EK": -15.0,
             "El": 0.0,
@@ -133,8 +133,8 @@ def run_model(sim, path):
     
     basket_fs_neuron = {
          "V0": -65.0,
-         "Iextmean": 1.0,        
-         "Iextvarience": 0.5,
+         "Iextmean": 0.2,        
+         "Iextvarience": 0.2,
          "ENa": 50.0,
          "EK": -90.0,
          "El": -65.0,
@@ -155,8 +155,8 @@ def run_model(sim, path):
         "gbarKa" : 16.5,
         "gbarH" : 0.05,
         "EH" : -32.9,
-        "Iextmean" : 1.0,        
-        "Iextvarience": 0.5,
+        "Iextmean" : 0.2,        
+        "Iextvarience": 0.2,
     }
     
     CosSpikeGeneratorParams = {
@@ -168,7 +168,7 @@ def run_model(sim, path):
     
     PoisonSpikeGenerator = {
        "latency" :  10.0, # in ms
-       "probability" : 0.0001,
+       "probability" : 0.00001,
     }
     
     ext_synapse_params = {
@@ -183,7 +183,7 @@ def run_model(sim, path):
         "Erev" : -15.0,
         "gbarS": 0.005,
         "tau" : 5.0,
-        "w" : 15.0,
+        "w" : 10.0,
         "delay" : 50,
     }
     
@@ -198,7 +198,7 @@ def run_model(sim, path):
     Nb = 50   # number of basket cells
     Nolm = 50 # number of olm cells
     Ns = 400 # number synapses between pyramide cells
-    Nint2pyr = 4 # number synapses from one interneuron to one pyramide neuron 
+    Nint2pyr = 50 # 4 # number synapses from one interneuron to one pyramide neuron 
     NSG = 20 # number of spike generators
     Ns2in = 400 # number synapses from septal generators to hippocampal interneurons 
     
@@ -222,7 +222,7 @@ def run_model(sim, path):
     
     for idx in range(Nb):
          neuron = {
-            "type" : "basket",
+            "type" : "FS_Neuron",
             "compartments" : basket_fs_neuron.copy()
          }
          neuron["compartments"]["V0"] += 10 * np.random.rand()
@@ -277,6 +277,7 @@ def run_model(sim, path):
         if (pre_ind == post_ind):
             post_ind = np.random.randint(0, Np)
         synapse = {
+           "type" : "SimpleSynapseWithDelay",
            "pre_ind": pre_ind, 
            "post_ind": post_ind,
            "pre_compartment_name": "soma",
@@ -291,6 +292,7 @@ def run_model(sim, path):
             pre_ind = np.random.randint(Np, Np + Nb)
             
             synapse = {
+               "type" : "SimpleSynapseWithDelay",
                "pre_ind": pre_ind, 
                "post_ind": idx,
                "pre_compartment_name": "soma",
@@ -304,6 +306,7 @@ def run_model(sim, path):
         for idx in range(Np):
             pre_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
             synapse = {
+               "type" : "SimpleSynapseWithDelay",
                "pre_ind": pre_ind, 
                "post_ind": idx,
                "pre_compartment_name": "soma",
@@ -322,6 +325,7 @@ def run_model(sim, path):
         # set synapse from pyramide to OLM neuron
         post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
         synapse = {
+           "type" : "SimpleSynapseWithDelay",
            "pre_ind": pre_ind, 
            "post_ind": post_ind,
            "pre_compartment_name": "soma",
@@ -335,6 +339,7 @@ def run_model(sim, path):
         # set synapse from pyramide to basket neuron
         post_ind = np.random.randint(Np, Np + Nb)
         synapse = {
+           "type" : "SimpleSynapseWithDelay",
            "pre_ind": pre_ind, 
            "post_ind": post_ind,
            "pre_compartment_name": "soma",
@@ -352,15 +357,15 @@ def run_model(sim, path):
         pre_ind = np.random.randint(Np + Nb + Nolm, Np + Nb + Nolm + NSG//2)
         post_ind = np.random.randint(Np, Np + Nb)
         synapse = {
-               "pre_ind": pre_ind, 
-               "post_ind": post_ind,
-               "pre_compartment_name": "soma",
-               "post_compartment_name" : "soma",
-               "params": inh_synapse_params.copy(),
-               
+            "type" : "SimpleSynapseWithDelay",
+            "pre_ind": pre_ind, 
+            "post_ind": post_ind,
+            "pre_compartment_name": "soma",
+            "post_compartment_name" : "soma",
+            "params": inh_synapse_params.copy(),
             }
         # synapse["params"]["Erev"] = -75
-        synapse["params"]["w"] = 50
+        synapse["params"]["w"] = 100
         synapse["params"]["delay"] = np.random.randint(20, 50)
         synapses.append(synapse)
     
@@ -369,14 +374,15 @@ def run_model(sim, path):
         pre_ind = np.random.randint(Np + Nb + Nolm + NSG//2, Np + Nb + Nolm + NSG)
         post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
         synapse = {
-               "pre_ind": pre_ind, 
-               "post_ind": post_ind,
-               "pre_compartment_name": "soma",
-               "post_compartment_name" : "soma",
-               "params": inh_synapse_params.copy()
+            "type" : "SimpleSynapseWithDelay",
+            "pre_ind": pre_ind, 
+            "post_ind": post_ind,
+            "pre_compartment_name": "soma",
+            "post_compartment_name" : "soma",
+            "params": inh_synapse_params.copy()
         }
         # synapse["params"]["Erev"] = -75
-        synapse["params"]["w"] = 50
+        synapse["params"]["w"] = 100
         synapse["params"]["delay"] = np.random.randint(20, 50)
         synapses.append(synapse)
     
@@ -415,15 +421,16 @@ def run_model(sim, path):
         plt.plot(t, VmeanSoma, "b")
         plt.subplot(212)
         plt.plot(t, VmeanDendrite, "r")
-      
+        
+        plt.savefig(path + "mean_V", dpi=300)
         lfp = net.getLFP()
     
-        # lfp = lfp[::20]
-        np.savetxt(path + "lfp.csv", lfp[::20])
         lfp = plib.butter_bandpass_filter(lfp, 1, 80, 1000/dt, 3)
         np.save(path + "lfp", lfp)
-        plt.savefig(path + "mean_V", dpi=300)
         
+        currents = net.getfullLFP()
+        np.save(path + "  currents", currents)
+       
         plt.figure()
         plt.plot(t, lfp)
         #plt.xlim(1000, 1500)
@@ -503,7 +510,7 @@ plt.show()
 ###########################
 """
 
-
+"""
 # one rhytm
 theta_power = np.zeros([15], dtype=float)
 
@@ -534,11 +541,11 @@ plt.xticks([1, 2, 3], ["control", "-dendrite", "-soma"])
 plt.ylabel("theta power on soma")
 plt.savefig(saving_fig_path + "one_rhythm.png")
 plt.show()
+"""
 
 
 
-
-
+"""
 # phase difference research
 sim.set_mode("different_phase_shift")
 sim.set_params([0, 1])
@@ -550,7 +557,7 @@ path = saving_fig_path + "different_phase_shift/"
 if not( os.path.isdir(path) ):
     os.mkdir(path)
 
-idx2 = -1
+idx2 = 0
 idx3 = 0
 for idx in range(10):
     
@@ -562,14 +569,12 @@ for idx in range(10):
 
     path_tmp = path + str(idx + 1) + "_"
     
-    """
-    if (idx >= 82):
-        theta = run_model(sim, path_tmp)
-    else:
-        theta = 0
+
+    theta = run_model(sim, path_tmp)
+
     theta_power[idx2, idx3] = theta
     idx3 += 1
-    """
+    
     
     
 
@@ -579,15 +584,15 @@ plt.ylabel("theta power on soma")
 plt.xlabel("phase shift, rad")
 plt.savefig(saving_fig_path + "phase_shift.png")
 plt.show()
-
-
 """
+
+
 theta_power = np.zeros([3], dtype=float)
 
 sim.set_mode("only_one_rhytm")
 sim.set_params([1, 1])
 
-path = saving_fig_path + "lfp_by_All_I_one_rhythm/"
+path = saving_fig_path + "test/"
 if not( os.path.isdir(path) ):
     os.mkdir(path)
     
@@ -597,7 +602,7 @@ for idx in range(3):
     theta = run_model(sim, path_tmp)
     print (time.time() - t)
     theta_power[idx] = theta
-"""
+
 #lib.testqueue()
 
 

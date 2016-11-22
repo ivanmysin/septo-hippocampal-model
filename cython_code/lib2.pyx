@@ -905,9 +905,11 @@ cdef class SimpleSynapseWithDelay(OriginSynapse):
 cdef class Network:
     cdef list neurons
     cdef list synapses
-
+    cdef list neuron_params, synapse_params
     cdef double t
     def __cinit__(self, neuron_params, synapse_params):
+        self.neuron_params = neuron_params
+        self.synapse_params = synapse_params
         self.neurons = list()
         self.synapses = list()
         self.t = 0
@@ -957,7 +959,8 @@ cdef class Network:
         cdef int NS = len(self.synapses)
         cdef int s_ind = 0
         cdef int neuron_ind = 0
-        while(self.t < duration):
+        cdef double t = 0
+        while(t < duration):
             #with nogil, cython.boundscheck(False), cython.wraparound(False):
                 for neuron_ind in range(NN):
                     
@@ -975,6 +978,7 @@ cdef class Network:
                     self.synapses[s_ind].integrate(dt)
                 
 
+                t += dt
                 self.t += dt
             
     def getVhist(self):
@@ -1029,12 +1033,22 @@ cdef class Network:
             
             
         return firing
-
-
-
         
-    def addIextbyT(self, double t):
-        pass 
+    def save_results(self, file):
+        result = {
+            "simulation_params" : {},
+            "results" : {},
+        }
+        result["simulation_params"]["neurons"] = self.neuron_params
+        result["simulation_params"]["synapses"] = self.synapse_params
+        
+        result["results"]["lfp"] = self.getLFP()
+        result["results"]["firing"] = self.getFiring()
+        result["results"]["V"] = self.getVhist()
+        result["results"]["currents"] = self.getfullLFP()
+        
+        np.save(file, result)
+
         
 
 cpdef testqueue():

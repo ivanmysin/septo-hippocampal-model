@@ -86,8 +86,8 @@ def run_model(sim, path):
     soma_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.5,        
-            "Iextvarience": 0.2,
+            "Iextmean": -1.5,        
+            "Iextvarience": 0.5,
             "ENa": 120.0,
             "EK": -15.0,
             "El": 0.0,
@@ -101,14 +101,13 @@ def run_model(sim, path):
             "gbarK_C " : 15.0,
             "gl": 0.1,
             "gbarCa": 6.0,
-        
     }
     
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.5,        
-            "Iextvarience": 0.2,
+            "Iextmean": -1.5,        
+            "Iextvarience": 0.5,
             "ENa": 120.0,
             "EK": -15.0,
             "El": 0.0,
@@ -133,7 +132,7 @@ def run_model(sim, path):
     
     basket_fs_neuron = {
          "V0": -65.0,
-         "Iextmean": 0.2,        
+         "Iextmean": -0.5,        
          "Iextvarience": 0.2,
          "ENa": 50.0,
          "EK": -90.0,
@@ -155,15 +154,16 @@ def run_model(sim, path):
         "gbarKa" : 16.5,
         "gbarH" : 0.05,
         "EH" : -32.9,
-        "Iextmean" : 0.2,        
+        "Iextmean" : 0.3,        
         "Iextvarience": 0.2,
     }
     
     CosSpikeGeneratorParams = {
-       "freq"  : 6.0, # frequency in Hz
+       "freq"  : 5.0, # frequency in Hz
        "phase" : 0.0, # phase in rad
        "latency" :  10.0, # in ms
        "probability" : 0.01,
+       "threshold" : 0.5,
     }
     
     PoisonSpikeGenerator = {
@@ -171,46 +171,92 @@ def run_model(sim, path):
        "probability" : 0.00001,
     }
     
+    simple_ext_synapse_params = {
+        "Erev" : 60.0,
+        "gbarS": 0.005,
+        "tau" : 0.2,
+        "w" : 20.0,
+        "delay" : 0,
+    }
+    
+    simple_inh_synapse_params = {
+        "Erev" : -15.0,
+        "gbarS": 0.005,
+        "tau" : 0.5,
+        "w" : 100.0,
+        "delay" : 0,
+    }
+    
     ext_synapse_params = {
         "Erev" : 60.0,
         "gbarS": 0.005,
-        "tau" : 2.0,
-        "w" : 5.0,
-        "delay" : 50,
+        "alpha_s" : 1.1,
+        "beta_s": 0.19,
+        "K": 5.0,
+        "teta": 2.0,
+        "w" : 20.0,
+        "delay" : 0,
     }
-
+    
     inh_synapse_params = {
         "Erev" : -15.0,
         "gbarS": 0.005,
-        "tau" : 5.0,
-        "w" : 10.0,
-        "delay" : 50,
+        "alpha_s" : 14.0,
+        "beta_s": 0.07,
+        "K": 2.0,
+        "teta": 0.0,
+        "w" : 20.0,
+        "delay" : 0,
     }
+    
+    
+    
     
     if (sim.get_mode() == "variate_frequency"):
         CosSpikeGeneratorParams["freq"] = sim.p
         
    
-    ##########################
+      
     neurons = []
     synapses = []
-    Np = 400 # number of pyramide neurons
+    Np = 400  # number of pyramide neurons
     Nb = 50   # number of basket cells
-    Nolm = 50 # number of olm cells
-    Ns = 400 # number synapses between pyramide cells
-    Nint2pyr = 50 # 4 # number synapses from one interneuron to one pyramide neuron 
-    NSG = 20 # number of spike generators
-    Ns2in = 400 # number synapses from septal generators to hippocampal interneurons 
+    Nolm = 50 # 50 # number of olm cells
+    NSG = 100 # 100 # number of septum spike generators    
+    Nec = 100 # number of EC inputs
+    Ncs = 100 # 100 # number of Shaffer collateral iunput
     
+    Ns = 600 # number synapses between pyramide cells
+    Nbasket2pyr = 10  # 100 4 # number synapses from basket interneuron to one pyramide neuron 
+    Nolm2pyr = 10      # 4 # number synapses from basket interneuron to one pyramide neuron 
+    Nspyr2basket = 10 # number synapses from one pyramide to interneurons
+    Nspyr2OLM = 10    
+    # number synapses from septal generators to hippocampal interneurons 
+    Nspv12bas = 400
+    Nspv22olm = 200
+    NsEc2pyr = 50        # 100         # 20         # 40
+    NsCs2pyr = 100
+    NsCs2bas = 25
+    
+    indexes = {
+        "pyr" : [],
+        "bas" : [],
+        "olm" : [],
+        "pv1" : [],
+        "pv2" : [],
+        "mec" : [],
+        "cs"  : [],
+    }
+            
     
     for idx in range(Np):
         soma = {"soma" : soma_params.copy()}
         soma["soma"]["V0"] = 0.5 * np.random.randn()
-        soma["soma"]["Iextmean"] += 0.5*np.random.randn()
+        soma["soma"]["Iextmean"] += 0.5 * np.random.randn()
         
         dendrite = {"dendrite" : dendrite_params.copy()}
         dendrite["dendrite"]["V0"] = soma["soma"]["V0"]
-        dendrite["dendrite"]["Iextmean"] += 0.5*np.random.randn()
+        dendrite["dendrite"]["Iextmean"] += 0.5 * np.random.randn()
        
         connection = connection_params.copy()
         neuron = {
@@ -218,6 +264,7 @@ def run_model(sim, path):
             "compartments" : [soma, dendrite],
             "connections" : [connection]
         }
+        indexes["pyr"].append(len(neurons))
         neurons.append(neuron)
     
     for idx in range(Nb):
@@ -226,7 +273,8 @@ def run_model(sim, path):
             "compartments" : basket_fs_neuron.copy()
          }
          neuron["compartments"]["V0"] += 10 * np.random.rand()
-         neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
+         neuron["compartments"]["Iextmean"] += 0.5 * np.random.randn()
+         indexes["bas"].append(len(neurons))
          neurons.append(neuron)
          
     for idx in range(Nolm):
@@ -235,17 +283,19 @@ def run_model(sim, path):
             "compartments" : olm_params.copy()
         }
         neuron["compartments"]["V0"] += 10 * np.random.rand()
-        neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
+        neuron["compartments"]["Iextmean"] += 0.5 * np.random.randn()
+        indexes["olm"].append(len(neurons))
         neurons.append(neuron)
     
     for idx in range(NSG):
-        
+        """
         if (sim.get_mode() == "only_one_rhytm" and sim.p[1] == 0 and idx >= NSG//2):
             
             neuron = {
                 "type" : "PoisonSpikeGenerator", 
                 "compartments" : PoisonSpikeGenerator.copy()
             }
+            indexes["pv2"].append(len(neurons))
             neurons.append(neuron)
             continue  
         
@@ -255,29 +305,61 @@ def run_model(sim, path):
                 "type" : "PoisonSpikeGenerator", 
                 "compartments" : PoisonSpikeGenerator.copy()
             }
+            indexes["pv1"].append(len(neurons))
             neurons.append(neuron)
             continue
-        
+        """
         
         neuron = {
             "type" : "CosSpikeGenerator", 
             "compartments" : CosSpikeGeneratorParams.copy()
         }
+        # neuron["compartments"]["threshold"] = 0.6
+        neuron["compartments"]["phase"] = -2.15 + 1.5 # np.pi # 0.5 - 2.15
         if (idx >= NSG//2):
+            """
             if (sim.get_mode() == "different_phase_shift"):
                 neuron["compartments"]["phase"] = sim.p
+                indexes["pv1"].append(len(neurons))
             else:
-                neuron["compartments"]["phase"] = 2.65 # !!!!
-        
+                neuron["compartments"]["phase"] = 0.5 * np.pi + 2.15 # !!!!
+                indexes["pv2"].append(len(neurons))
+            """ 
+            neuron["compartments"]["phase"] = 1.5 # 0.2 #np.pi + 2.15 # !!!!
+            indexes["pv2"].append(len(neurons))
+        else:
+            indexes["pv1"].append(len(neurons))
+        neurons.append(neuron)
+    
+    
+    for idx in range(Nec):    
+        neuron = {
+            "type" : "CosSpikeGenerator", 
+            "compartments" : CosSpikeGeneratorParams.copy()
+        }
+        neuron["compartments"]["phase"] = -2.79 # !!!!!!!!
+        indexes["mec"].append(len(neurons))
+        neurons.append(neuron)
+    
+    for idx in range(Ncs):    
+        neuron = {
+            "type" : "CosSpikeGenerator", 
+            "compartments" : CosSpikeGeneratorParams.copy()
+        }
+        neuron["compartments"]["phase"] = 0 # !!!!!!!! 
+        indexes["cs"].append(len(neurons))
         neurons.append(neuron)
     
     for idx in range(Ns):
-        pre_ind = np.random.randint(0, Np)
-        post_ind = np.random.randint(0, Np)
+        #synapse beteween pyramides 
+        
+        pre_ind = np.random.choice(indexes["pyr"])
+        post_ind = np.random.choice(indexes["pyr"])
+        
         if (pre_ind == post_ind):
             post_ind = np.random.randint(0, Np)
         synapse = {
-           "type" : "SimpleSynapseWithDelay",
+           "type" : "ComplexSynapse", # "SimpleSynapseWithDelay",
            "pre_ind": pre_ind, 
            "post_ind": post_ind,
            "pre_compartment_name": "soma",
@@ -287,12 +369,13 @@ def run_model(sim, path):
         synapse["params"]["delay"] = np.random.randint(20, 50)
         synapses.append(synapse)
     
-    for _ in range(Nint2pyr):
-        for idx in range(Np):
-            pre_ind = np.random.randint(Np, Np + Nb)
+    for _ in range(Nbasket2pyr):
+        for idx in indexes["pyr"]:
+            # synapses from basket cells to pyramides
             
+            pre_ind = np.random.choice(indexes["bas"])
             synapse = {
-               "type" : "SimpleSynapseWithDelay",
+               "type" : "ComplexSynapse", # "SimpleSynapseWithDelay",
                "pre_ind": pre_ind, 
                "post_ind": idx,
                "pre_compartment_name": "soma",
@@ -302,11 +385,13 @@ def run_model(sim, path):
             synapse["params"]["delay"] = np.random.randint(20, 50)
             synapses.append(synapse)
     
-    for _ in range(Nint2pyr):
-        for idx in range(Np):
-            pre_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
+    for _ in range(Nolm2pyr):
+        for idx in indexes["pyr"]:
+            # synapses from OLM cells to pyramides
+            pre_ind = np.random.choice(indexes["olm"])
+            
             synapse = {
-               "type" : "SimpleSynapseWithDelay",
+               "type" : "ComplexSynapse", # "SimpleSynapseWithDelay",
                "pre_ind": pre_ind, 
                "post_ind": idx,
                "pre_compartment_name": "soma",
@@ -318,71 +403,130 @@ def run_model(sim, path):
     
     
     
-      
-    for idx in range(Np):
-        pre_ind = idx
-        
-        # set synapse from pyramide to OLM neuron
-        post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
-        synapse = {
-           "type" : "SimpleSynapseWithDelay",
-           "pre_ind": pre_ind, 
-           "post_ind": post_ind,
-           "pre_compartment_name": "soma",
-           "post_compartment_name" : "soma",
-           "params": ext_synapse_params.copy(),
-           
-        }
-        synapse["params"]["delay"] = np.random.randint(20, 50)
-        synapses.append(synapse)
-        
-        # set synapse from pyramide to basket neuron
-        post_ind = np.random.randint(Np, Np + Nb)
-        synapse = {
-           "type" : "SimpleSynapseWithDelay",
-           "pre_ind": pre_ind, 
-           "post_ind": post_ind,
-           "pre_compartment_name": "soma",
-           "post_compartment_name" : "soma",
-           "params": ext_synapse_params.copy(),
-           
-        }
-        synapse["params"]["delay"] = np.random.randint(20, 50)
-        synapses.append(synapse)
+    for _ in range(Nspyr2OLM): 
+        for idx in indexes["pyr"]:
+            pre_ind = idx
+            
+            # set synapse from pyramide to OLM neuron
+            post_ind = np.random.choice(indexes["olm"])
+            synapse = {
+               "type" : "ComplexSynapse", # "SimpleSynapseWithDelay",
+               "pre_ind": pre_ind, 
+               "post_ind": post_ind,
+               "pre_compartment_name": "soma",
+               "post_compartment_name" : "soma",
+               "params": ext_synapse_params.copy(),
+               
+            }
+            synapse["params"]["delay"] = np.random.randint(20, 50)
+            synapses.append(synapse)
+    
+    for _ in range(Nspyr2basket):
+        for idx in indexes["pyr"]:
+            # set synapse from pyramide to basket neuron
+            pre_ind = idx
+            post_ind =  np.random.choice(indexes["bas"])
+            synapse = {
+               "type" : "ComplexSynapse", # "SimpleSynapseWithDelay",
+               "pre_ind": pre_ind, 
+               "post_ind": post_ind,
+               "pre_compartment_name": "soma",
+               "post_compartment_name" : "soma",
+               "params": ext_synapse_params.copy(),
+               
+            }
+            synapse["params"]["delay"] = np.random.randint(20, 50)
+            synapses.append(synapse)
     
     
     
     
-    for idx in range(Ns2in):
-        pre_ind = np.random.randint(Np + Nb + Nolm, Np + Nb + Nolm + NSG//2)
-        post_ind = np.random.randint(Np, Np + Nb)
+    for idx in range(Nspv12bas):
+        # set synapses from pv1 to basket
+        pre_ind =  np.random.choice(indexes["pv1"])
+        post_ind = np.random.choice(indexes["bas"])
         synapse = {
             "type" : "SimpleSynapseWithDelay",
             "pre_ind": pre_ind, 
             "post_ind": post_ind,
             "pre_compartment_name": "soma",
             "post_compartment_name" : "soma",
-            "params": inh_synapse_params.copy(),
+            "params": simple_inh_synapse_params.copy(),
             }
         # synapse["params"]["Erev"] = -75
-        synapse["params"]["w"] = 100
+        # synapse["params"]["w"] = 100
         synapse["params"]["delay"] = np.random.randint(20, 50)
         synapses.append(synapse)
     
     
-    for idx in range(Ns2in):
-        pre_ind = np.random.randint(Np + Nb + Nolm + NSG//2, Np + Nb + Nolm + NSG)
-        post_ind = np.random.randint(Np + Nb, Np + Nb + Nolm)
+    for idx in range(Nspv22olm):
+        # set synapses from pv1 to olm
+        pre_ind = np.random.choice(indexes["pv2"])
+        post_ind = np.random.choice(indexes["olm"])
         synapse = {
             "type" : "SimpleSynapseWithDelay",
             "pre_ind": pre_ind, 
             "post_ind": post_ind,
             "pre_compartment_name": "soma",
             "post_compartment_name" : "soma",
-            "params": inh_synapse_params.copy()
+            "params": simple_inh_synapse_params.copy()
         }
         # synapse["params"]["Erev"] = -75
-        synapse["params"]["w"] = 100
+        # synapse["params"]["w"] = 100
+        synapse["params"]["delay"] = np.random.randint(20, 50)
+        synapses.append(synapse)
+    
+    
+
+    for idx in range(NsCs2pyr):
+        # synapses from shaffer colletarel to pyramodes
+        pre_ind = np.random.choice(indexes["cs"])
+        post_ind = np.random.choice(indexes["pyr"])
+        synapse = {
+            "type" : "SimpleSynapseWithDelay",
+            "pre_ind": pre_ind, 
+            "post_ind": post_ind,
+            "pre_compartment_name": "soma",
+            "post_compartment_name" : "soma",
+            "params": simple_ext_synapse_params.copy()
+        }
+
+        # synapse["params"]["w"] = 20
+        synapse["params"]["delay"] = np.random.randint(20, 50)
+        synapses.append(synapse)
+    
+    
+    for idx in range(NsCs2bas):
+        # synapses from shaffer colletarel to basket
+        pre_ind = np.random.choice(indexes["cs"])
+        post_ind = np.random.choice(indexes["bas"])
+        synapse = {
+            "type" : "SimpleSynapseWithDelay",
+            "pre_ind": pre_ind, 
+            "post_ind": post_ind,
+            "pre_compartment_name": "soma",
+            "post_compartment_name" : "soma",
+            "params": simple_ext_synapse_params.copy()
+        }
+
+        #synapse["params"]["w"] = 100
+        synapse["params"]["delay"] = np.random.randint(20, 50)
+        synapses.append(synapse)
+    
+    for idx in range(NsEc2pyr):
+        # synapses from perforant pathway to pyramodes
+        pre_ind = np.random.choice(indexes["mec"])
+        post_ind = np.random.choice(indexes["pyr"])
+        synapse = {
+            "type" : "SimpleSynapseWithDelay",
+            "pre_ind": pre_ind, 
+            "post_ind": post_ind,
+            "pre_compartment_name": "soma",
+            "post_compartment_name" : "dendrite",
+            "params": simple_ext_synapse_params.copy()
+        }
+
+        #synapse["params"]["w"] = 100
         synapse["params"]["delay"] = np.random.randint(20, 50)
         synapses.append(synapse)
     
@@ -477,7 +621,7 @@ def run_model(sim, path):
         
         """
         print ("Что-то посчиталось!!!")
-    return
+    return indexes
 saving_fig_path = "/home/ivan/Data/modeling_septo_hippocampal_model/hippocampal_model/"
 sim = SimmulationParams()
 #############################
@@ -514,7 +658,7 @@ plt.show()
 ###########################
 """
 
-
+"""
 # one rhytm
 sim.set_mode("only_one_rhytm")
 sim.set_params([1, 1])
@@ -532,7 +676,7 @@ for idx in range(15):
     
     path_tmp = path + str(idx + 1) + "_"
     run_model(sim, path_tmp)
-    
+"""   
     
 
     
@@ -547,13 +691,13 @@ plt.show()
 
 
 
-
+"""
 # phase difference research
 sim.set_mode("different_phase_shift")
 sim.set_params([0, 1])
 
 
-p = np.array([2.65, np.pi], dtype=float)   #np.linspace(-np.pi, np.pi, 20)
+p = np.array([2.65, np.pi, -2.65], dtype=float)   #np.linspace(-np.pi, np.pi, 20)
 
 path = saving_fig_path + "different_phase_shift/"
 if not( os.path.isdir(path) ):
@@ -561,7 +705,7 @@ if not( os.path.isdir(path) ):
 
 idx2 = 0
 idx3 = 0
-for idx in range(10):
+for idx in range(15):
 
     if (idx%5 == 0):
         sim.set_params(p[idx2])
@@ -571,6 +715,7 @@ for idx in range(10):
     path_tmp = path + str(idx + 1) + "_"
     run_model(sim, path_tmp)
     idx3 += 1
+"""
     
 """  
 plt.figure()
@@ -581,8 +726,7 @@ plt.savefig(saving_fig_path + "phase_shift.png")
 plt.show()
 """
 
-"""
-theta_power = np.zeros([3], dtype=float)
+
 
 sim.set_mode("only_one_rhytm")
 sim.set_params([1, 1])
@@ -591,14 +735,13 @@ path = saving_fig_path + "test/"
 if not( os.path.isdir(path) ):
     os.mkdir(path)
     
-for idx in range(3):
+for idx in range(1):
     path_tmp = path + str(idx + 1) + "_"
     t = time.time()
-    theta = run_model(sim, path_tmp)
+    indexes = run_model(sim, path_tmp)
     print (time.time() - t)
-    theta_power[idx] = theta
-"""
+
 #lib.testqueue()
 
-
+import lfp_processing
     

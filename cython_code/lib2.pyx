@@ -91,7 +91,7 @@ cdef class PoisonSpikeGenerator(OriginCompartment):
         return self.firing
 
 cdef class CosSpikeGenerator(OriginCompartment):
-    cdef double t, freq, phase, latency, lat, probability
+    cdef double t, freq, phase, latency, lat, probability, threshold
     
     def __cinit__(self, params):
         self.t = 0
@@ -99,6 +99,7 @@ cdef class CosSpikeGenerator(OriginCompartment):
         self.phase = params["phase"]
         self.latency = params["latency"] # in ms
         self.probability = params["probability"] # probability of spike generation in time moment
+        self.threshold = params["threshold"]
         self.firing = np.array([])
         self.lat = -self.latency/2
         
@@ -108,7 +109,7 @@ cdef class CosSpikeGenerator(OriginCompartment):
         self.lat -= dt
         
         cdef double signal = cos(2 * np.pi * self.t * self.freq + self.phase)
-        if (signal > 0.5 and self.lat <= 0 and self.probability > np.random.rand() ):
+        if (signal > self.threshold and self.lat <= 0 and self.probability > np.random.rand() ):
             self.V = 50
             self.lat = self.latency
             self.firing = np.append(self.firing, 1000 * self.t)
@@ -264,7 +265,7 @@ cdef class OLM_cell(OriginCompartment):
         cdef double tau_n = 1 / (self.alpha_n() + self.beta_n())
         return n_0 - (n_0 - self.n) * exp(-dt/tau_n)
 #######
-    def integrate (self, double dt, double duraction):
+    cpdef integrate (self, double dt, double duraction):
 
         cdef double t = 0
         cdef double i = 0
@@ -563,7 +564,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
     cdef double alpha_m(self):
         cdef double x = 13.1 - self.V
         if (x == 0):
-            x = 0.000001
+            x = 0.01
         cdef double alpha = 0.32 * x / (exp(0.25 * x) - 1)
         return alpha
         
@@ -571,7 +572,7 @@ cdef class PyramideCA1Compartment(OriginCompartment):
     cdef double beta_m(self):
         cdef double x = self.V - 40.1
         if (x == 0):
-            x = 0.00001
+            x = 0.01
         cdef double beta = 0.28 * x / (exp(0.2 * x) - 1)
         return beta
         
@@ -675,8 +676,6 @@ cdef class PyramideCA1Compartment(OriginCompartment):
             
             I = -self.Il - self.INa - self.IK_DR - self.IK_AHP - self.IK_C - self.ICa - self.Isyn - self.Icoms + self.Iext
             lfp = (I + self.Icoms) / (4 * np.pi * 0.3)
-            # self.Isyn
-            
            
             self.LFP = np.append(self.LFP, lfp)
             
@@ -719,7 +718,7 @@ cdef class IntercompartmentConnection:
     
     def activate(self):
         
-        cdef double Icomp1= (self.g / self.p) * (self.comp1.getV() - self.comp2.getV())
+        cdef double Icomp1 = (self.g / self.p) * (self.comp1.getV() - self.comp2.getV())
         cdef double Icomp2 = (self.g/(1 - self.p)) * (self.comp2.getV() - self.comp1.getV())
         
         self.comp1.addIcoms(Icomp1)
@@ -1015,8 +1014,8 @@ cdef class Network:
             if not("dendrite" in keys):
                 continue
             
+            lfp.append({})
             for key in keys:
-                lfp.append({})
                 Vext =  -1.0 * n.getCompartmentByName(key).getLFP()
                 if (key == "soma"):
                     lfp[-1]["soma"] = Vext

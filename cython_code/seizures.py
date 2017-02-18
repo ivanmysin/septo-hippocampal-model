@@ -5,10 +5,8 @@ model of seizures in hippocampus
 
 import lib2 as lib
 import numpy as np
-import processingLib as plib
-import matplotlib.pyplot as plt
 import os
-import time
+#import time
 
 
 class SimmulationParams:
@@ -52,7 +50,7 @@ if __name__ == "__main__":
     soma_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.5,        
+            "Iextmean": 0.5,        
             "Iextvarience": 0.2,
             "ENa": 120.0,
             "EK": -15.0,
@@ -73,7 +71,7 @@ if __name__ == "__main__":
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -0.5,        
+            "Iextmean": 0.5,        
             "Iextvarience": 0.2,
             "ENa": 120.0,
             "EK": -15.0,
@@ -169,9 +167,9 @@ if __name__ == "__main__":
     Np = 400 # number of pyramide neurons
     Nb = 50   # number of basket cells
     Nolm = 50 # number of olm cells
-    Ns = 400 # number synapses between pyramide cells
-    Nint2pyr = 50 # 4 # number synapses from one interneuron to one pyramide neuron 
-    NSG = 20 # number of spike generators
+    Ns = 1600 # number synapses between pyramide cells
+    Nint2pyr = 100 # 4 # number synapses from one interneuron to one pyramide neuron 
+    NSG = 0 # number of spike generators
     Ns2in = 400 # number synapses from septal generators to hippocampal interneurons 
     
     
@@ -182,7 +180,7 @@ if __name__ == "__main__":
         
         dendrite = {"dendrite" : dendrite_params.copy()}
         dendrite["dendrite"]["V0"] = soma["soma"]["V0"]
-        dendrite["dendrite"]["Iextmean"] += 0.5*np.random.randn()
+        #dendrite["dendrite"]["Iextmean"] += 0.5*np.random.randn()
        
         connection = connection_params.copy()
         neuron = {
@@ -198,7 +196,7 @@ if __name__ == "__main__":
             "compartments" : basket_fs_neuron.copy()
          }
          neuron["compartments"]["V0"] += 10 * np.random.rand()
-         neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
+         #neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
          neurons.append(neuron)
          
     for idx in range(Nolm):
@@ -207,7 +205,7 @@ if __name__ == "__main__":
             "compartments" : olm_params.copy()
         }
         neuron["compartments"]["V0"] += 10 * np.random.rand()
-        neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
+        #neuron["compartments"]["Iextmean"] += 0.5*np.random.randn()
         neurons.append(neuron)
     
     for idx in range(NSG):
@@ -264,7 +262,7 @@ if __name__ == "__main__":
             pre_ind = np.random.randint(Np, Np + Nb)
             
             synapse = {
-               "type" : "ComplexSynapses",
+               "type" : "ComplexSynapse",
                "pre_ind": pre_ind, 
                "post_ind": idx,
                "pre_compartment_name": "soma",
@@ -360,10 +358,11 @@ if __name__ == "__main__":
     """
     for syn in synapses:
         if (syn["params"]["Erev"] == 60):
-            syn["params"]["w"] *= 3
-        if (syn["params"]["Erev"] == -15):
-            syn["params"]["w"] /= 3
+            syn["params"]["w"] *= 2
             
+        if (syn["params"]["Erev"] == -15):
+            syn["params"]["w"] /= 2
+
     dt = 0.1
     duration = 500
     net = lib.Network(neurons, synapses)

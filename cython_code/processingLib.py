@@ -266,10 +266,10 @@ def get_units_phase_coupling(lfp, firing, fd):
     amp /= np.linalg.norm(amp) 
     lfp_phases = np.angle(analitic_signal, deg=False )
     
-            
+    """       
     if (firing[1, :].size == 0):
         return 0, 0
-        
+    """    
     start = np.min(firing[1, :]).astype(int)
     end = np.max(firing[1, :]).astype(int) + 1
     for idx in range(start, end):
@@ -287,7 +287,18 @@ def get_units_phase_coupling(lfp, firing, fd):
         
     return angles, length
 
-
-
+def get_units_disrtibution(lfp, fd, firing, firing_slices):
+    analitic_signal = sig.hilbert(lfp)
+    lfp_phases = np.angle(analitic_signal, deg=False )
+    neurons_phases = {}
+    for key, sl in firing_slices.items():
+        fir = firing[:, sl]
+        neurons_phases[key] = []
+        if (fir.size == 0):
+            continue
+        indexes = (fir[0, :] * fd).astype(int)
+        neurons_phases[key] = lfp_phases[indexes]
+    
+    return neurons_phases
 
     

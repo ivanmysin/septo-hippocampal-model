@@ -119,7 +119,7 @@ def filtrate_lfp(lfp, fd):
     lfp_fft = 2 * np.fft.rfft(lfp_norm) / lfp.size
     
     w = np.fft.rfftfreq(lfp.size, 1/fd )
-    Z = np.exp(-0.05*w)
+    Z = np.exp(-0.05 * w)
     Z = 0.8*Z + 0.2
     Z[w>=150] = 0
     
@@ -293,7 +293,7 @@ def get_units_disrtibution(lfp, fd, firing, firing_slices):
     neurons_phases = {}
     for key, sl in firing_slices.items():
         fir = firing[:, sl]
-        neurons_phases[key] = []
+        neurons_phases[key] = np.array([], dtype=float)
         if (fir.size == 0):
             continue
         indexes = (fir[0, :] * fd).astype(int)

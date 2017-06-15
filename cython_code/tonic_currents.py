@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-main script
+testing tonic currents on the all neurons
 """
 
 import lib2 as lib
@@ -10,82 +11,13 @@ import matplotlib.pyplot as plt
 import os
 import time
 
-class SimmulationParams:
-    def __init__(self, params=None, mode="default"):
-        self.p = params
-        self.mode = mode
-      
-    # variate frequency from septum 
-    def iext_function(self, neuron_ind, compartment_name, t):
-        return 0
-          
-        t = 0.001 * t
-        Iext = 0
-        if (neuron_ind >= 100 and neuron_ind < 105):
-            Iext = np.cos(2 * np.pi * t * 8) + 1
 
-        if (neuron_ind >= 105):
-            Iext = np.cos(2 * np.pi * t * 8 + 2.65) + 1
-        return Iext
-               
-        
-        
-        """        
-        if self.mode == "default":
-            return 0
-        
-        if self.mode == "variate_frequency":
 
-            if compartment_name == "soma":
-                Iext = np.cos(2 * np.pi * t * self.p) - 1
-           
-            if compartment_name == "dendrite":
-                Iext = np.cos(2 * np.pi * t * self.p + 2.65) - 1
-            # Iext *= 2
-            return Iext
-        
-        # one rhytm
-        if self.mode == "only_one_rhytm":
-  
-            if compartment_name == "soma":
-                Iext = self.p[0] * np.cos(2 * np.pi * t * 8) - 1
-                
-            if compartment_name == "dendrite":
-                Iext = self.p[1] * np.cos(2 * np.pi * t * 8 + 2.65) - 1
-            
-            if Iext == 0:
-                Iext = -np.random.rand()
-            Iext *= 0.5
-            return Iext
-        
-        if self.mode == "different_phase_shift":
-            
-            if compartment_name == "soma":
-                Iext = np.cos(2 * np.pi * t * 6) - 1
-                
-            if compartment_name == "dendrite":
-                Iext = np.cos(2 * np.pi * t * 6 + self.p) - 1
-            #Iext *= 2
-            return Iext
-            
-        return 0
-    """
-    
-    def set_params(self, params):
-        self.p = params
-        
-    
-    def set_mode(self, mode):
-        self.mode = mode
-        
-    def get_mode(self):
-        return self.mode
-
-def run_model(sim, path):
+def run_model(path, params):
     soma_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -1.0,        
+            "Iextmean": params["pyr_iext_soma"],        
             "Iextvarience": 0.5,
             "ENa": 120.0,
             "EK": -15.0,
@@ -105,7 +37,7 @@ def run_model(sim, path):
     dendrite_params = {
             "V0": 0.0,
             "C" : 3.0,
-            "Iextmean": -1.0,        
+            "Iextmean": params["pyr_iext_dendrite"],        
             "Iextvarience": 0.5,
             "ENa": 120.0,
             "EK": -15.0,
@@ -131,8 +63,8 @@ def run_model(sim, path):
     
     basket_fs_neuron = {
          "V0": -65.0,
-         "Iextmean": -0.5,        
-         "Iextvarience": 0.5,
+         "Iextmean": params["bas_iext"],        
+         "Iextvarience": 0.2,
          "ENa": 50.0,
          "EK": -90.0,
          "El": -65.0,
@@ -153,8 +85,8 @@ def run_model(sim, path):
         "gbarKa" : 16.5,
         "gbarH" : 0.05,
         "EH" : -32.9,
-        "Iextmean" : 0.0,        
-        "Iextvarience": 0.5,
+        "Iextmean" : params["olm_iext"],        
+        "Iextvarience": 0.2,
     }
     
     CosSpikeGeneratorParams = {
@@ -167,13 +99,13 @@ def run_model(sim, path):
     
     PoisonSpikeGenerator = {
        "latency" :  10.0, # in ms
-       "probability" : 0.00001,
+       "probability" : 0.01,
     }
     
     simple_ext_synapse_params = {
         "Erev" : 60.0,
         "gbarS": 0.005,
-        "tau" : 0.5, # 0.2, # 1.3–2
+        "tau" : 0.2,
         "w" : 20.0,
         "delay" : 0,
     }
@@ -181,7 +113,7 @@ def run_model(sim, path):
     simple_inh_synapse_params = {
         "Erev" : -15.0,
         "gbarS": 0.005,
-        "tau" : 0.2, # 4.2-7.2 ms
+        "tau" : 0.5,
         "w" : 100.0,
         "delay" : 0,
     }
@@ -193,7 +125,7 @@ def run_model(sim, path):
         "beta_s": 0.19,
         "K": 5.0,
         "teta": 2.0,
-        "w" : 10.0,
+        "w" : 20.0,
         "delay" : 0,
     }
     
@@ -204,16 +136,12 @@ def run_model(sim, path):
         "beta_s": 0.07,
         "K": 2.0,
         "teta": 0.0,
-        "w" : 10.0,
+        "w" : 20.0,
         "delay" : 0,
     }
     
     
-    
-    
-    if (sim.get_mode() == "variate_frequency"):
-        CosSpikeGeneratorParams["freq"] = sim.p
-        
+  
    
       
     neurons = []
@@ -221,21 +149,25 @@ def run_model(sim, path):
     Np = 400  # number of pyramide neurons
     Nb = 50   # number of basket cells
     Nolm = 50 # 50 # number of olm cells
-    NSG = 100 # 100 # number of septum spike generators    
-    Nec = 100 # number of EC inputs
-    Ncs = 100 # 100 # number of Shaffer collateral iunput
     
-    Ns = 600 # number synapses between pyramide cells
-    Nbasket2pyr = 3   # 100 4 # number synapses from basket interneuron to one pyramide neuron 
-    Nolm2pyr = 10      # 4 # number synapses from olm interneuron to one pyramide neuron 
+    Npv1 = params["n_pv1"]   # number of septum spike generators    
+    Npv2 = params["n_pv2"]
+    
+    Nec = params["n_ec"] # number of EC inputs
+    Ncs = params["n_cs"] # 100 # number of Shaffer collateral iunput
+    
+    Ns = 600           # number synapses between pyramide cells
+    Nbasket2pyr = 10   # 100 4 # number synapses from basket interneuron to one pyramide neuron 
+    Nolm2pyr = 10      # 4 # number synapses from basket interneuron to one pyramide neuron 
     Nspyr2basket = 10  # number synapses from one pyramide to interneurons
     Nspyr2OLM = 20    
+   
     # number synapses from septal generators to hippocampal interneurons 
-    Nspv12bas = 400
-    Nspv22olm = 400
-    NsEc2pyr = 150       # 40
-    NsCs2pyr = 150
-    NsCs2bas = 25
+    Nspv12bas =  params["Nspv12bas"]
+    Nspv22olm = params["Nspv22olm"]
+    NsEc2pyr = params["NsEc2pyr"]     
+    NsCs2pyr = params["NsCs2pyr"] 
+    NsCs2bas = params["NsCs2bas"]
     
     indexes = {
         "pyr" : [],
@@ -286,68 +218,90 @@ def run_model(sim, path):
         indexes["olm"].append(len(neurons))
         neurons.append(neuron)
     
-    for idx in range(NSG):
-        """
-        if (sim.get_mode() == "only_one_rhytm" and sim.p[1] == 0 and idx >= NSG//2):
-            
+    for idx in range(Npv1):
+        
+        
+        if (params["pv1_type"] == "rhythm"):
+            neuron = {
+                "type" : "CosSpikeGenerator", 
+                "compartments" : CosSpikeGeneratorParams.copy()
+            }
+            # neuron["compartments"]["threshold"] = 0.6
+            neuron["compartments"]["phase"] = params["ms_pv1_pv2_phase_shift"] + params["ms_cs_pp_phase_shift"] 
+        
+        elif(params["pv1_type"] == "random"):
             neuron = {
                 "type" : "PoisonSpikeGenerator", 
                 "compartments" : PoisonSpikeGenerator.copy()
             }
-            indexes["pv2"].append(len(neurons))
-            neurons.append(neuron)
-            continue  
-        
-        if (sim.get_mode() == "only_one_rhytm" and sim.p[0] == 0 and idx < NSG//2):
-            
-            neuron = {
-                "type" : "PoisonSpikeGenerator", 
-                "compartments" : PoisonSpikeGenerator.copy()
-            }
-            indexes["pv1"].append(len(neurons))
-            neurons.append(neuron)
-            continue
-        """
-        
-        neuron = {
-            "type" : "CosSpikeGenerator", 
-            "compartments" : CosSpikeGeneratorParams.copy()
-        }
-        
-        neuron["compartments"]["phase"] = -2.15 + 1.5 # np.pi # 0.5 - 2.15
-        if (idx >= NSG//2):
-            """
-            if (sim.get_mode() == "different_phase_shift"):
-                neuron["compartments"]["phase"] = sim.p
-                indexes["pv1"].append(len(neurons))
-            else:
-                neuron["compartments"]["phase"] = 0.5 * np.pi + 2.15 # !!!!
-                indexes["pv2"].append(len(neurons))
-            """ 
-            neuron["compartments"]["phase"] = 1.5 # 0.2 #np.pi + 2.15 # !!!!
-            indexes["pv2"].append(len(neurons))
         else:
-            indexes["pv1"].append(len(neurons))
+            raise ValueError("undefined type of ms pv1 neuron")
+            
+        indexes["pv1"].append(len(neurons))
         neurons.append(neuron)
     
-    
-    for idx in range(Nec):    
-        neuron = {
-            "type" : "CosSpikeGenerator", 
-            "compartments" : CosSpikeGeneratorParams.copy()
-        }
-        neuron["compartments"]["threshold"] = 0.3 
-        neuron["compartments"]["phase"] = -2.79 # !!!!!!!!
+    for idx in range(Npv2):
+        
+        if (params["pv2_type"] == "rhythm"):
+            neuron = {
+                "type" : "CosSpikeGenerator", 
+                "compartments" : CosSpikeGeneratorParams.copy()
+            }
+        
+            neuron["compartments"]["phase"] = params["ms_cs_pp_phase_shift"]
+        
+        elif(params["pv2_type"] == "random"):
+            neuron = {
+                "type" : "PoisonSpikeGenerator", 
+                "compartments" : PoisonSpikeGenerator.copy()
+            }
+        else:
+            raise ValueError("undefined type of ms pv2 neuron")
+            
+        indexes["pv2"].append(len(neurons))
+        neurons.append(neuron)
+  
+    for idx in range(Nec):
+        
+        if (params["pp_type"] == "rhythm"):
+            neuron = {
+                "type" : "CosSpikeGenerator", 
+                "compartments" : CosSpikeGeneratorParams.copy()
+            }
+            neuron["compartments"]["threshold"] = 0.3 
+            neuron["compartments"]["phase"] = -2.79 # !!!!!!!!
+
+        elif(params["pp_type"] == "random"):
+            neuron = {
+                "type" : "PoisonSpikeGenerator", 
+                "compartments" : PoisonSpikeGenerator.copy()
+            }
+        else:
+            raise ValueError("undefined type of ec neuron")        
+        
+        
         indexes["mec"].append(len(neurons))
         neurons.append(neuron)
     
-    for idx in range(Ncs):    
-        neuron = {
-            "type" : "CosSpikeGenerator", 
-            "compartments" : CosSpikeGeneratorParams.copy()
-        }
-        neuron["compartments"]["threshold"] = 0.3
-        neuron["compartments"]["phase"] = 0 # !!!!!!!! 
+    for idx in range(Ncs):
+        
+        if (params["cs_type"] == "rhythm"):
+            neuron = {
+                "type" : "CosSpikeGenerator", 
+                "compartments" : CosSpikeGeneratorParams.copy()
+            }
+            neuron["compartments"]["threshold"] = 0.3
+            neuron["compartments"]["phase"] = 0 # !!!!!!!! 
+        
+        elif(params["cs_type"] == "random"):
+            neuron = {
+                "type" : "PoisonSpikeGenerator", 
+                "compartments" : PoisonSpikeGenerator.copy()
+            }
+        else:
+            raise ValueError("undefined type of ec neuron")          
+        
+        
         indexes["cs"].append(len(neurons))
         neurons.append(neuron)
     
@@ -516,7 +470,6 @@ def run_model(sim, path):
     
     for idx in range(NsEc2pyr):
         # synapses from perforant pathway to pyramodes
-
         pre_ind = np.random.choice(indexes["mec"])
         post_ind = np.random.choice(indexes["pyr"])
         synapse = {
@@ -528,7 +481,7 @@ def run_model(sim, path):
             "params": simple_ext_synapse_params.copy()
         }
 
-        #synapse["params"]["w"] = 1
+        #synapse["params"]["w"] = 100
         synapse["params"]["delay"] = np.random.randint(20, 50)
         synapses.append(synapse)
     
@@ -537,8 +490,9 @@ def run_model(sim, path):
     for syn in synapses:
         print (neurons[syn["pre_ind"]]["type"] + " -> " + neurons[syn["post_ind"]]["type"])
         print ( str(syn["pre_ind"]) + " -> " + str(syn["post_ind"]) )
-    return
+    return 
     """
+    
     
 
     
@@ -550,202 +504,120 @@ def run_model(sim, path):
         
         net.integrate(dt, duration)
         net.save_results(path + "_all_results")
-        
-        """
-        V = net.getVhist()
-        VmeanSoma = 0
-        VmeanDendrite = 0
-        np.save(path + "V", V)
-        for v in V:
-            try:
-                VmeanSoma += v["soma"]
-                VmeanDendrite += v["dendrite"]
-            except KeyError:
-                continue
-            
-        VmeanSoma /= Np
-        VmeanDendrite /= Np
-        t = np.linspace(duration-500, duration, VmeanSoma.size)
-        plt.figure()
-        plt.subplot(211)
-        plt.plot(t, VmeanSoma, "b")
-        plt.subplot(212)
-        plt.plot(t, VmeanDendrite, "r")
-        
-        plt.savefig(path + "mean_V", dpi=300)
-        lfp = net.getLFP()
-    
-        lfp = plib.butter_bandpass_filter(lfp, 1, 80, 1000/dt, 3)
-        np.save(path + "lfp", lfp)
-        
-        currents = net.getfullLFP()
-        np.save(path + "  currents", currents)
-       
-        plt.figure()
-        plt.plot(t, lfp)
-        #plt.xlim(1000, 1500)
-        # lfp_half = lfp[t > duration/2]
-        plt.savefig(path + "lfp", dpi=300)
-        
-        fft_y = np.abs(np.fft.rfft(lfp))/lfp.size
-        fft_x = np.fft.rfftfreq(lfp.size, 0.001*dt)
-        plt.figure()
-        plt.plot(fft_x[1:], fft_y[1:])
-        plt.xlim(2, 50)
-        
-        theta_power = np.sum(fft_y[(fft_x>4)&(fft_x<12)])/np.sum(fft_y)
-        plt.savefig(path + "spectra_of_lfp", dpi=300)
-        firing = net.getFiring()
-        np.save(path + "firing", firing)
-        
-        
-        plt.figure()
-        
-        cum_it = Np
-        sl = firing[1, :] <= cum_it
-        pyr_line, = plt.plot(firing[0, sl], firing[1, sl], '.b', label='Pyramide')
-        
-        sl = (firing[1, :] > cum_it) & (firing[1, :] <= cum_it + Nb)
-    
-        basket_line, = plt.plot(firing[0, sl], firing[1, sl], '.g', label='Basket')
-        cum_it += Nb
-        sl = (firing[1, :] > cum_it) & (firing[1, :] <= cum_it + Nolm)
-        
-        olm_line, = plt.plot(firing[0, sl], firing[1, sl], '.m', label='OLM')
-        cum_it += Nolm
-        sl = (firing[1, :] > cum_it)
-        
-        septal_line, = plt.plot(firing[0, sl], firing[1, sl], '.r', label='Septum')
-        
-        plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-        plt.savefig(path + "raster", dpi=300)
-        plt.show()
-        
-        
-        
-        """
+ 
         print ("Что-то посчиталось!!!")
     return indexes
+#######################################################
 saving_fig_path = "/home/ivan/Data/modeling_septo_hippocampal_model/hippocampal_model/"
-sim = SimmulationParams()
-#############################
-"""
-# variate frequency from septum
-theta_power = np.zeros([20, 5], dtype=float)
 
-path = saving_fig_path + "variate_frequency/"
-if not( os.path.isdir(path) ):
-    os.mkdir(path)
+params = {
+    "ms_cs_pp_phase_shift" : 1.5,
+    "ms_pv1_pv2_phase_shift" : -2.15,
+    "n_pv1" : 50,
+    "n_pv2" : 50,
+    "n_ec" : 100,
+    "n_cs" : 100,
+    "Nspv12bas" : 400,
+    "Nspv22olm" : 200,
+    "NsEc2pyr" : 25,       
+    "NsCs2pyr" : 150,
+    "NsCs2bas" : 25,
+    
+    "cs_type" : "rhythm",
+    "pp_type" : "rhythm",
+    "pv1_type" : "rhythm",
+    "pv2_type" : "rhythm",
+    
+    "pyr_iext_soma" : -1.5,
+    "pyr_iext_dendrite": -1.5,
+    
+    "olm_iext" : 0,
+    "bas_iext" : -0.5,
 
-p = np.linspace(1, 20, 20)
-sim.set_mode("variate_frequency")
-idx2 = -1
-idx3 = 0
-for idx in range(100):
-    if (idx%5 == 0):
-        idx2 += 1
-        sim.set_params(p[idx2]) 
-        
-        idx3 = 0
-    path_tmp = path + str(idx + 1) + "_"
-    theta = run_model(sim, path_tmp)
-    theta_power[idx2, idx3] = theta
-    idx3 += 1
+}
 
-plt.figure()
-plt.boxplot(theta_power.T)
-plt.ylabel("theta power on soma")
-plt.xlabel("frequency of septum output")
-plt.savefig(saving_fig_path + "variate_septum_frequency.png")
-plt.show()
 
-###########################
-"""
 
-"""
-# one rhytm
-sim.set_mode("only_one_rhytm")
-sim.set_params([1, 1])
-
-path = saving_fig_path + "only_one_rhytm/"
+path = saving_fig_path + "pyramide_soma_tonic_current/"
 if not( os.path.isdir(path) ):
     os.mkdir(path)
     
-for idx in range(15):
-    if (idx == 5):
-        sim.set_params([1, 0])
+currents = np.repeat( np.linspace(-2, 1, 7), 10  )
 
-    if (idx == 10):
-        sim.set_params([0, 1])
+for idx, i in enumerate(currents[63:]):
     
-    path_tmp = path + str(idx + 1) + "_"
-    run_model(sim, path_tmp)
-"""   
+    path_tmp = path + str(idx + 63 + 1) + "_"
     
-
+    params_tmp = params.copy()
     
-"""
-plt.figure()
-plt.boxplot( [theta_power[0:10], theta_power[10:20], theta_power[20:30]] )
-plt.xticks([1, 2, 3], ["control", "-dendrite", "-soma"])
-plt.ylabel("theta power on soma")
-plt.savefig(saving_fig_path + "one_rhythm.png")
-plt.show()
-"""
-
-
-
-"""
-# phase difference research
-sim.set_mode("different_phase_shift")
-sim.set_params([0, 1])
-
-
-p = np.array([2.65, np.pi, -2.65], dtype=float)   #np.linspace(-np.pi, np.pi, 20)
-
-path = saving_fig_path + "different_phase_shift/"
-if not( os.path.isdir(path) ):
-    os.mkdir(path)
-
-idx2 = 0
-idx3 = 0
-for idx in range(15):
-
-    if (idx%5 == 0):
-        sim.set_params(p[idx2])
-        idx2 += 1
-        idx3 = 0
-
-    path_tmp = path + str(idx + 1) + "_"
-    run_model(sim, path_tmp)
-    idx3 += 1
-"""
-    
-"""  
-plt.figure()
-plt.errorbar(p, np.mean(theta_power, axis=1), yerr=np.std(theta_power, axis=1), fmt='o')
-plt.ylabel("theta power on soma")
-plt.xlabel("phase shift, rad")
-plt.savefig(saving_fig_path + "phase_shift.png")
-plt.show()
-"""
-
-
-
-sim.set_mode("only_one_rhytm")
-sim.set_params([1, 1])
-
-path = saving_fig_path + "basic_model_test/"
-if not( os.path.isdir(path) ):
-    os.mkdir(path)
-    
-for idx in range(11, 12):
-    path_tmp = path + str(idx + 1) + "_"
+    params_tmp["pyr_iext_soma"] = i
+     
+   
     t = time.time()
-    indexes = run_model(sim, path_tmp)
+    indexes = run_model(path_tmp, params_tmp)
+    print (time.time() - t)
+   
+"""
+path = saving_fig_path + "pyramide_dendrite_tonic_current/"
+if not( os.path.isdir(path) ):
+    os.mkdir(path)
+    
+
+currents = np.repeat( np.linspace(-2, 1, 7), 10  )
+
+for idx, i in enumerate(currents):
+    path_tmp = path + str(idx + 1) + "_"
+    
+    params_tmp = params.copy()
+    
+    params_tmp["pyr_iext_dendrite"] = i
+     
+   
+    t = time.time()
+    indexes = run_model(path_tmp, params_tmp)
+    print (time.time() - t)
+"""
+
+"""
+path = saving_fig_path + "bas_tonic_current/"
+if not( os.path.isdir(path) ):
+    os.mkdir(path)
+    
+currents = np.repeat( np.linspace(-2, 1, 7), 10  )
+
+for idx, i in enumerate(currents):
+    path_tmp = path + str(idx + 1) + "_"
+    
+    params_tmp = params.copy()
+    
+    params_tmp["bas_iext"] = i
+     
+   
+    t = time.time()
+    indexes = run_model(path_tmp, params_tmp)
     print (time.time() - t)
 
-# lib.testqueue()
+"""
 
-# import lfp_processing
+
+"""
+
+path = saving_fig_path + "olm_tonic_current/"
+if not( os.path.isdir(path) ):
+    os.mkdir(path)
+
+
+currents = np.repeat( np.linspace(-2, 1, 7), 10  )
+
+for idx, i in enumerate(currents):
+    path_tmp = path + str(idx + 1 ) + "_"
     
+    params_tmp = params.copy()
+    
+    params_tmp["olm_iext"] = i
+     
+   
+    t = time.time()
+    indexes = run_model(path_tmp, params_tmp)
+    print (time.time() - t)
+"""

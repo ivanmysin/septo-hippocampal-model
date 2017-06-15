@@ -41,7 +41,7 @@ namespace complex_neurons {
 
         unsigned int seed = chrono::system_clock::now().time_since_epoch().count();
         generator =  new default_random_engine (seed);
-        normRand = new normal_distribution <double> (Iextmean, Iextvarience );
+        normRand = new normal_distribution <double> ( Iextmean, Iextvarience );
 
 
         calculate_currents();

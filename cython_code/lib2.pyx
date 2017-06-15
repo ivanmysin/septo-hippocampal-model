@@ -124,7 +124,184 @@ cdef class CosSpikeGenerator(OriginCompartment):
     
     def getFiring(self):
         return self.firing
+
+
+cdef class HS_projective_neuron(OriginCompartment):
+    cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El, EH, ECa
+    cdef double gbarNa, gbarK, gl, gbarK_Ca, gbarH, gbarCa, alpha_Ca, tau_Ca
+    cdef double th
+    cdef bool countSp
+    cdef double m, h, n, r, H, Ca, KD
+    cdef double INa, IK, IH, IK_Ca, ICa, Il
+
+    def __cinit__(self, params):
+        self.V = params["V0"]
+        self.Iextmean = params["Iextmean"]        
+        self.Iextvarience = params["Iextvarience"]
+        self.ENa = params["ENa"]
+        self.EK = params["EK"]
+        self.El = params["El"]
+        self.EH = params["EH"]
+        self.ECa = params["ECa"]
         
+        self.Ca = params["Ca"]
+        self.KD = params["KD"]
+         
+        self.gbarNa = params["gbarNa"]
+        self.gbarK = params["gbarK"]
+        self.gl = params["gl"]   
+        self.gbarK_Ca = params["gbarK_Ca"]
+        self.gbarCa = params["gbarCa"]
+        self.gbarH = params["gbarH"]         
+        self.alpha_Ca = params["alpha_Ca"]  #  0.002
+        self.tau_Ca  = params["tau_Ca"]  # = 80
+     
+        self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+        self.n = self.alpha_n() / (self.alpha_n() + self.beta_n())
+        self.h = self.alpha_h() / (self.alpha_h() + self.beta_h())
+        self.r = self.r_inf()
+        self.H = self.H_inf()
+         
+         
+        self.INa = self.gbarNa * self.m * self.m * self.m * self.h * (self.ENa - self.V)
+        self.IK = self.gbarK * self.n * self.n * self.n * self.n  * (self.EK - self.V)
+        self.IH = self.gbarH * self.H * (self.EH - self.V)
+        self.ICa = self.gbarCa * self.r * self.r * (self.ECa - self.V)
+        self.IK_Ca = (self.gbarK_Ca * self.Ca / (self.Ca + self.KD) ) * (self.EK - self.V)
+        self.Il = self.gl * (self.El - self.V)
+        
+        
+        self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+        self.Isyn = 0
+        self.countSp = True
+        self.th = -20
+        self.Vhist = np.array([])
+        self.LFP = np.array([])
+
+        self.firing = np.array([])
+    cdef double getV(self):
+        return self.V
+
+    def getLFP(self):
+        return 0
+
+    cdef double alpha_m(self):
+        
+         cdef double  x = -0.1 * (self.V + 35)
+         if (x == 0):
+            x = 0.000000001
+         cdef double alpha = x / ( exp(x) - 1 )
+         return alpha
+#########
+    cdef double beta_m(self):
+        cdef double beta = 4 * exp(- (self.V + 60) / 18 )
+        return beta
+
+
+########
+    cdef double alpha_h(self):
+        cdef double alpha = 0.07 * exp( -(self.V + 58) / 20)
+        return alpha
+
+########
+    cdef double beta_h(self):
+        cdef double beta = 1 / ( exp(-0.1 * (self.V + 28)) + 1 )
+        return beta
+    
+########
+    cdef double alpha_n(self):
+        cdef double x = self.V + 34
+        if ( x==0 ):
+            x = 0.00000000001
+        cdef double alpha = -0.01 * x / (exp(-0.1*x) - 1)
+        return alpha
+#######np.
+
+    cdef double beta_n(self):
+        cdef double beta = 0.125 * exp(-(self.V + 44) / 80)
+        return beta
+    
+    cdef double r_inf (self):
+        cdef double rinf = 1 / (1 + exp(-(self.V + 20)/9) )
+        return rinf
+ 
+    cdef double H_inf(self):
+        cdef double Hinf = 1 / (1 + exp((self.V + 80)/10))
+        return Hinf
+    
+    cdef double H_tau(self):
+        cdef double Htau = 200 / ( exp( (self.V + 70)/20 ) +  exp( -(self.V + 70)/20 ) ) + 5
+        return Htau
+        
+    cdef double h_integrate(self, double dt):
+        cdef double h_0 = self.alpha_h() / (self.alpha_h() + self.beta_h())
+        cdef double tau_h = 1 / (self.alpha_h() + self.beta_h())
+        return h_0 - (h_0 - self.h) * exp(-dt/tau_h)
+
+    cdef double n_integrate(self, double dt):
+        cdef double n_0 = self.alpha_n() / (self.alpha_n() + self.beta_n() )
+        cdef double tau_n = 1 / (self.alpha_n() + self.beta_n())
+        return n_0 - (n_0 - self.n) * exp(-dt/tau_n)
+
+    cdef double H_integrate(self, double dt):
+        cdef double H_0 = self.H_inf()
+        cdef double tau_H = self.H_tau()
+        return H_0 - (H_0 - self.H) * exp(-dt/tau_H)
+
+    cdef double Ca_integrate(self, double dt):
+        
+        cdef double k1 = self.Ca
+        cdef double k2 = k1 + 0.5 * dt * (self.alpha_Ca * self.ICa - k1 / self.tau_Ca)
+        cdef double k3 = k2 + 0.5 * dt * (self.alpha_Ca * self.ICa - k2 / self.tau_Ca )
+        cdef double k4 = k1 + dt * (self.alpha_Ca * self.ICa - k1 / self.tau_Ca)        
+        return (k1 + 2*k2 + 2*k3 + k4) / 6
+    
+
+    cpdef integrate (self, double dt, double duraction):
+
+        cdef double t = 0
+        cdef double i = 0
+        while (t < duraction):
+            self.Vhist = np.append(self.Vhist, self.V)
+            
+            self.V = self.V + dt * (self.INa + self.IK + self.IH + self.ICa + self.IK_Ca + self.Il - self.Isyn + self.Iext)
+    
+            self.m = self.alpha_m() / (self.alpha_m() + self.beta_m())
+            self.n = self.n_integrate(dt)
+            self.h = self.h_integrate(dt)
+            self.r = self.r_inf()
+            self.Ca = self.Ca_integrate(dt)
+            
+            self.INa = self.gbarNa * self.m * self.m * self.m * self.h * (self.ENa - self.V)
+            self.IK = self.gbarK * self.n * self.n * self.n * self.n  * (self.EK - self.V)
+            self.IH = self.gbarH * self.H * (self.EH - self.V)
+            self.ICa = self.gbarCa * self.r * self.r * (self.ECa - self.V)
+            self.IK_Ca = (self.gbarK_Ca * self.Ca / (self.Ca + self.KD) ) * (self.EK - self.V)
+
+            
+            self.Il = self.gl * (self.El - self.V)
+            self.Iext = np.random.normal(self.Iextmean, self.Iextvarience) 
+            self.Isyn = 0
+            i += 1
+            t += dt
+  
+
+########
+    cpdef checkFired(self, double t_):
+    
+        if (self.V >= self.th and self.countSp):
+            self.firing = np.append(self.firing, t_)
+            self.countSp = False
+        
+        if (self.V < self.th):
+            self.countSp = True 
+            
+    def addIsyn(self, double Isyn):
+        self.Isyn += Isyn  
+ 
+
+
+       
 cdef class OLM_cell(OriginCompartment):
     cdef double Capacity, Iextmean, Iextvarience, ENa, EK, El, EH
     cdef double gbarNa, gbarK, gl, gbarKa, gbarH
@@ -932,7 +1109,9 @@ cdef class Network:
                 
             if (neuron_params[idx]["type"] == "PoisonSpikeGenerator"):
                 neuron = PoisonSpikeGenerator(neuron_params[idx]["compartments"])
-
+            
+            if (neuron_params[idx]["type"] == "HS_projective_neuron"):
+                neuron = HS_projective_neuron(neuron_params[idx]["compartments"])
             self.neurons.append(neuron)
         length = len(synapse_params)
         
@@ -951,7 +1130,7 @@ cdef class Network:
             self.synapses.append(synapse)
             idx += 1
     
-    cpdef integrate(self, double dt, double duration, iext_function):
+    cpdef integrate(self, double dt, double duration):
         
         cdef double Iext_model
         cdef int NN = len(self.neurons)
